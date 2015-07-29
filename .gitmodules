@@ -1,0 +1,3 @@
+[submodule "server/src/simpleiot"]
+	path = server/src/simpleiot
+	url = https://github.com/smartanthill/smartanthill-simpleiot.git

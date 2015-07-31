@@ -15,28 +15,25 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#if !defined __HAL_EEPROM_H__
-#define __HAL_EEPROM_H__
+#if !defined __SA_EEPROM_H__
+#define __SA_EEPROM_H__
 
-//#include "../../firmware/src/common/sa_common.h"
 #include <simpleiot/siot_common.h>
 
-#define HAL_PS_INIT_FAILED 0
-#define HAL_PS_INIT_OK 1
-#define HAL_PS_INIT_OK_NEEDS_INITIALIZATION 2
+// data IDs (for communication with eeprom
+#define EEPROM_SLOT_DATA_SASP_NONCE_LW_ID 0 // Nonce Lower Watermark
+#define EEPROM_SLOT_DATA_SASP_NONCE_LS_ID 1 // Nonce to use For Sending
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define EEPROM_SLOT_MAX 2
+// ...to be continued
 
-uint8_t hal_init_eeprom_access( char* path );
+#define DATA_CONTINUE_LIFE_ID 0Xff // FAKE data used at simulator startup: if not present, a new life (whatever it means) is started
 
-bool hal_eeprom_write( const uint8_t* data, uint16_t size, uint16_t address );
-bool hal_eeprom_read( uint8_t* data, uint16_t size, uint16_t address);
-void hal_eeprom_flush();
 
-#ifdef __cplusplus
-}
-#endif
+// calls
+void format_eeprom_at_lifestart();
+bool init_eeprom_access();
+void eeprom_write( uint8_t id, uint8_t* data);
+void eeprom_read( uint8_t id, uint8_t* data);
 
-#endif // __HAL_EEPROM_H__
+#endif // __SA_EEPROM_H__

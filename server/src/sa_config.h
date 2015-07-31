@@ -15,28 +15,35 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#if !defined __HAL_EEPROM_H__
-#define __HAL_EEPROM_H__
+/*******************************************************************************
+THIS FILE IS MANUALLY OR AUTOMATICALLY GENERATED BASED ON DESIRED PLUGIN LIST
+*******************************************************************************/
 
-//#include "../../firmware/src/common/sa_common.h"
-#include <simpleiot/siot_common.h>
 
-#define HAL_PS_INIT_FAILED 0
-#define HAL_PS_INIT_OK 1
-#define HAL_PS_INIT_OK_NEEDS_INITIALIZATION 2
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#if !defined __ZEPTO_CONFIG_H__
+#define __ZEPTO_CONFIG_H__
 
-uint8_t hal_init_eeprom_access( char* path );
+#define DECLARE_AES_ENCRYPTION_KEY \
+const uint8_t AES_ENCRYPTION_KEY[16] ZEPTO_PROG_CONSTANT_LOCATION = \
+{ \
+	0x00, \
+	0x01, \
+	0x02, \
+	0x03, \
+	0x04, \
+	0x05, \
+	0x06, \
+	0x07, \
+	0x08, \
+	0x09, \
+	0x0a, \
+	0x0b, \
+	0x0c, \
+	0x0d, \
+	0x0e, \
+	0x0f, \
+}; \
 
-bool hal_eeprom_write( const uint8_t* data, uint16_t size, uint16_t address );
-bool hal_eeprom_read( uint8_t* data, uint16_t size, uint16_t address);
-void hal_eeprom_flush();
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif // __HAL_EEPROM_H__
+#endif // __ZEPTO_CONFIG_H__

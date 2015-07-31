@@ -16,16 +16,17 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 
-#include "../../firmware/src/common/sa_common.h"
+//#include "../../firmware/src/common/sa_common.h"
+#include <simpleiot/siot_common.h>
 #include "commstack_commlayer.h"
-#include "../../firmware/src/hal/hal_time_provider.h"
-#include "../../firmware/src/common/saoudp_protocol.h"
-#include "../../firmware/src/common/sasp_protocol.h"
-#include "../../firmware/src/common/sagdp_protocol.h"
-#include "saccp_protocol_client_side.h"
-#include "test_generator.h"
+#include <hal_time_provider.h>
+#include <simpleiot/siot_oud_protocol.h>
+#include <simpleiot/siot_s_protocol.h>
+#include <simpleiot/siot_gd_protocol.h>
+//#include "saccp_protocol_client_side.h"
+//#include "test_generator.h"
 #include <stdio.h>
-#include "../../firmware/src/zepto_config.h"
+#include "sa_config.h"
 #include "hal_commstack_persistent_storage.h"
 
 #include <stdlib.h>     /* atoi */

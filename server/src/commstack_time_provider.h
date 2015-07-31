@@ -18,9 +18,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #if !defined __SA_HAL_TIME_PROVIDER_H__
 #define __SA_HAL_TIME_PROVIDER_H__
 
-//#include "../../firmware/src/common/sa_common.h"
 #include <simpleiot/siot_common.h>
-//#include "hal_platform.h"
 
 
 typedef struct _sa_time_struct

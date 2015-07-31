@@ -18,7 +18,6 @@ Copyright (C) 2015 OLogN Technologies AG
 #if !defined __HAL_EEPROM_H__
 #define __HAL_EEPROM_H__
 
-//#include "../../firmware/src/common/sa_common.h"
 #include <simpleiot/siot_common.h>
 
 #define HAL_PS_INIT_FAILED 0

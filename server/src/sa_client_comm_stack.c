@@ -16,7 +16,6 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 
-//#include "../../firmware/src/common/sa_common.h"
 #include <simpleiot/siot_common.h>
 #include "commstack_commlayer.h"
 #include <hal_time_provider.h>

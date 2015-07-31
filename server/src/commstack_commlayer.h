@@ -20,7 +20,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include <simpleiot/siot_common.h>
 #include <zepto_mem_mngmt_hal_spec.h>
-#include <simpleiot/siot_mem_mngmt.h>
+#include <simpleiot_hal/siot_mem_mngmt.h>
 
 // RET codes
 #define COMMLAYER_RET_FAILED 0

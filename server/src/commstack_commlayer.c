@@ -142,6 +142,13 @@ bool communication_with_comm_layer_initialize()
       return false;
     }
 
+	struct sockaddr_in sock_in;
+	socklen_t sock_len = sizeof(sock_in);
+	if (getsockname(sock_with_cl, (struct sockaddr *)&sock_in, &sock_len) == -1)
+	    perror("getsockname");
+	else
+		ZEPTO_DEBUG_PRINTF_2( "socket: started on port %d\n", ntohs(sock_in.sin_port) );
+
 	sock_with_cl_accepted = accept(sock_with_cl, NULL, NULL);
 
       if ( 0 > sock_with_cl_accepted )

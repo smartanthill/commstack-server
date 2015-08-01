@@ -533,6 +533,8 @@ char* get_persistent_storage_path_from_command_line(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+	setbuf(stdout, NULL);
+
 	set_port_from_command_line( argc, argv );
 
 	zepto_mem_man_init_memory_management();

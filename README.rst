@@ -8,7 +8,8 @@ using `Simple IoT Protocol stack <https://github.com/smartanthill/smartanthill-s
 Building
 --------
 
-.. code-block:: shell
+.. code-block:: bash
+
 	# change working directory
 	cd /tmp
 

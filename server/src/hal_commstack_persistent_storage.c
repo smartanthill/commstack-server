@@ -19,7 +19,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 #include <windows.h>
 #include <io.h>
 #else
@@ -37,7 +37,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 //FILE* f = NULL;
 int efile = -1;
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 HANDLE hfile = INVALID_HANDLE_VALUE;
 #endif
 
@@ -55,7 +55,7 @@ uint8_t hal_init_eeprom_access( char* path )
 	}
 
 	efile = open( path, O_RDWR | O_CREAT | O_BINARY, S_IWRITE | S_IREAD );
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 	hfile = (HANDLE) _get_osfhandle (efile);
 	if ( hfile == INVALID_HANDLE_VALUE )
 		return HAL_PS_INIT_FAILED;
@@ -95,7 +95,7 @@ bool hal_eeprom_read( uint8_t* data, uint16_t size, uint16_t address)
 
 void hal_eeprom_flush()
 {
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 	FlushFileBuffers(hfile);
 #else
 	fsync( efile );

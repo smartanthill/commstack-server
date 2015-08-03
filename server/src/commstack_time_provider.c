@@ -19,7 +19,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "commstack_commlayer.h"
 
 
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 
 #include <Windows.h>
 

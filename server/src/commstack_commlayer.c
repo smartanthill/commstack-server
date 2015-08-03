@@ -28,7 +28,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <stdlib.h>
 #include <sys/types.h>
 
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -62,7 +62,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 bool communication_preinitialize()
 {
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 	// do Windows magic
 	WSADATA wsaData;
 	int iResult;
@@ -82,7 +82,7 @@ bool communication_preinitialize()
 
 
 
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 SOCKET sock_with_cl;
 SOCKET sock_with_cl_accepted;
 #else
@@ -125,7 +125,7 @@ bool communication_with_comm_layer_initialize()
 
 	if (-1 == bind(sock_with_cl, (struct sockaddr *)&sa_self_with_cl, sizeof(sa_self_with_cl)))
 	{
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 		int error = WSAGetLastError();
 #else
 		int error = errno;
@@ -160,7 +160,7 @@ bool communication_with_comm_layer_initialize()
 
 	  sock_with_cl = sock_with_cl_accepted; /*just to keep names*/
 
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
     unsigned long ul = 1;
     ioctlsocket(sock_with_cl, FIONBIO, &ul);
 #else
@@ -192,7 +192,7 @@ uint8_t try_get_packet_within_master_loop( uint8_t* buff, uint16_t sz )
 	int recsize = recvfrom(sock_with_cl, (char *)(buff + buffer_in_with_cl_pos), sz - buffer_in_with_cl_pos, 0, (struct sockaddr *)&sa_other_with_cl, &fromlen);
 	if (recsize < 0)
 	{
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 		int error = WSAGetLastError();
 		if ( error == WSAEWOULDBLOCK )
 #else
@@ -226,7 +226,7 @@ uint8_t try_get_packet_size_within_master_loop( uint8_t* buff )
 	int recsize = recvfrom(sock_with_cl, (char *)(buff + buffer_in_with_cl_pos), 3 - buffer_in_with_cl_pos, 0, (struct sockaddr *)&sa_other_with_cl, &fromlen);
 	if (recsize < 0)
 	{
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 		int error = WSAGetLastError();
 		if ( error == WSAEWOULDBLOCK )
 #else
@@ -313,7 +313,7 @@ uint8_t send_within_master( MEMORY_HANDLE mem_h, uint8_t destination )
 
 	if (bytes_sent < 0)
 	{
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 		int error = WSAGetLastError();
 		ZEPTO_DEBUG_PRINTF_2( "Error %d sending packet\n", error );
 #else
@@ -321,7 +321,7 @@ uint8_t send_within_master( MEMORY_HANDLE mem_h, uint8_t destination )
 #endif
 		return COMMLAYER_RET_FAILED;
 	}
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 	ZEPTO_DEBUG_PRINTF_4( "[%d] message sent within master; mem_h = %d, size = %d\n", GetTickCount(), mem_h, sz );
 #else
 	ZEPTO_DEBUG_PRINTF_3( "[--] message sent within master; mem_h = %d, size = %d\n", mem_h, sz );
@@ -353,7 +353,7 @@ uint8_t wait_for_communication_event( unsigned int timeout )
 
     if (retval == -1)
 	{
-#ifdef _MSC_VER
+#if defined _MSC_VER || defined __MINGW32__
 		int error = WSAGetLastError();
 //		if ( error == WSAEWOULDBLOCK )
 		ZEPTO_DEBUG_PRINTF_2( "error %d\n", error );

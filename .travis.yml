@@ -23,21 +23,18 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 # DAMAGE
 
-#
-# Project Configuration File
-#
-# A detailed documentation with the EXAMPLES is located here:
-# http://docs.platformio.org/en/latest/projectconf.html
-#
+language: python
+python:
+    - "2.7"
 
-# A sign `#` at the beginning of the line indicates a comment
-# Comment lines are ignored.
+install:
+    - python -c "$(curl -fsSL https://raw.githubusercontent.com/platformio/platformio/master/scripts/get-platformio.py)"
+    # update to 2.3.0 development snapshot
+    - pip install https://github.com/platformio/platformio/archive/develop.zip
 
-# Simple and base environment
-# [env:mybaseenv]
-# platform = %INSTALLED_PLATFORM_NAME_HERE%
-# framework =
+    # Clone SmartAnthil Embedded Project (we need "hal_common" interface)
+    - git clone https://github.com/smartanthill/smartanthill2_0-embedded.git
+    - export PLATFORMIO_BUILD_FLAGS="-lrt -I$(pwd)/smartanthill2_0-embedded/firmware/src/hal_common"
 
-[env:native]
-platform = native
-build_flags = -DSA_PLATFORM_DESKTOP -DUSED_AS_MASTER -DUSED_AS_MASTER_COMMSTACK -DDEBUG_PRINTING -D_DEBUG
+script:
+    - platformio run --project-dir=server --environment=native

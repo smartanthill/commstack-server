@@ -1,6 +1,9 @@
 SmartAnthill Communication Stack server
 =======================================
 
+.. image:: https://travis-ci.org/smartanthill/smartanthill-commstack-server.svg?branch=develop
+    :target: https://travis-ci.org/smartanthill/smartanthill-commstack-server
+
 `SmartAnthill <https://github.com/smartanthill/smartanthill2_0>`_
 (Network Service) uses this server to communicate with the end embedded device
 using `Simple IoT Protocol stack <https://github.com/smartanthill/smartanthill-simpleiot>`_.
@@ -13,7 +16,7 @@ Building
 	# change working directory
 	cd /tmp
 
-	# 1. Clone SmartAnthil Embedded Project (we need `hal_common <https://github.com/smartanthill/smartanthill2_0-embedded/tree/develop/firmware/src/hal_common>`_ interface)
+	# 1. Clone SmartAnthil Embedded Project (we need "hal_common" interface)
 	git clone https://github.com/smartanthill/smartanthill2_0-embedded.git
 
 	# 2. Add SmartAnthill Embedded "hal_common" to C Preprocessor includes list
@@ -24,8 +27,8 @@ Building
 	cd smartanthill-commstack-server
 	git submodule update --init --recursive
 
-	# 4. Build binaries using `PlatformIO <http://platformio.org>`_ cross compiler
+	# 4. Build binaries using PlatformIO cross compiler
 	cd server
 	platformio run
 
-	# 5. Binaries are ready in `.pioenvs/%SYSTEM_TYPE%/program`
+	# 5. Binaries are ready in ".pioenvs/%SYSTEM_TYPE%/program"

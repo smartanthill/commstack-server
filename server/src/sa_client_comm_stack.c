@@ -416,8 +416,10 @@ saoudp_in:
 		{
 			case SAGDP_RET_SYS_CORRUPTED:
 			{
-				// TODO: reinit the system
+				send_error_to_central_unit( MEMORY_HANDLE_MAIN_LOOP_1 );
+				sagdp_init();
 				ZEPTO_DEBUG_PRINTF_1( "Internal error. System is to be reinitialized\n" );
+				goto wait_for_comm_event;
 				break;
 			}
 			case SAGDP_RET_TO_LOWER_NEW:

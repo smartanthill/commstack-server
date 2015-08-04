@@ -389,5 +389,10 @@ uint8_t send_to_central_unit( MEMORY_HANDLE mem_h )
 	return send_within_master( mem_h, 37 );
 }
 
+uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h )
+{
+	return send_within_master( mem_h, 47 );
+}
+
 // from comm.stack: 35: intended for slave; 37: intended for central unit
 //   to comm.stack: 40: received from slave; 38: received from central unit

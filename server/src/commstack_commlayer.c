@@ -16,7 +16,6 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 #include "commstack_commlayer.h"
-#include <simpleiot_hal/hal_waiting.h>
 #include <stdio.h>
 
 #define MAX_PACKET_SIZE 50
@@ -330,8 +329,13 @@ uint8_t send_within_master( MEMORY_HANDLE mem_h, uint8_t destination )
 }
 
 
-uint8_t wait_for_communication_event( unsigned int timeout )
+//uint8_t wait_for_communication_event( unsigned int timeout )
+uint8_t wait_for_communication_event( waiting_for* wf )
 {
+	unsigned int timeout = wf->wait_time.high_t;
+	timeout <<= 16;
+	timeout += wf->wait_time.low_t;
+
 	// ZEPTO_DEBUG_PRINTF_1( "wait_for_communication_event()\n" );
     fd_set rfds;
     struct timeval tv;

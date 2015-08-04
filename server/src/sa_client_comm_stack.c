@@ -95,7 +95,8 @@ int main_loop()
 	{
 wait_for_comm_event:
 //		ret_code = wait_for_communication_event( MEMORY_HANDLE_MAIN_LOOP_1, timer_val*100 ); // TODO: recalculation
-		ret_code = wait_for_communication_event( timer_val*100 ); // TODO: recalculation
+//		ret_code = wait_for_communication_event( timer_val*100 ); // TODO: recalculation
+		ret_code = wait_for_communication_event( &wait_for );
 //		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 //		ZEPTO_DEBUG_PRINTF_4( "=============================================Msg wait event; ret = %d, rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
 
@@ -103,7 +104,7 @@ wait_for_comm_event:
 		{
 			case COMMLAYER_RET_FAILED:
 			{
-				// regular processing will be done below in the next block
+				// fatal communication error
 				return 0;
 				break;
 			}
@@ -131,17 +132,6 @@ wait_for_comm_event:
 					ZEPTO_DEBUG_ASSERT( 0 );
 				}
 			}
-/*			case COMMLAYER_RET_FROM_DEV:
-			{
-				// regular processing will be done below in the next block
-				ret_code = hal_get_packet_bytes( MEMORY_HANDLE_MAIN_LOOP_1 );
-				if ( ret_code == HAL_GET_PACKET_BYTES_FAILED )
-					return 0;
-				ZEPTO_DEBUG_ASSERT( ret_code == HAL_GET_PACKET_BYTES_DONE );
-				zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
-				goto saoudp_in;
-				break;
-			}*/
 			case COMMLAYER_RET_TIMEOUT:
 			{
 				// regular processing will be done below in the next block
@@ -185,7 +175,8 @@ wait_for_comm_event:
 						sa_get_time( &currt );
 						ret_code = handler_sagdp_timer( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
 //			ZEPTO_DEBUG_PRINTF_1( "ret_code = %d\n", ret_code );
-						ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE && ret_code != SAGDP_RET_OK );
+//						ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE && ret_code != SAGDP_RET_OK );
+						ZEPTO_DEBUG_ASSERT( ret_code == SAGDP_RET_TO_LOWER_REPEATED );
 						zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 						goto saspsend;
 						break;

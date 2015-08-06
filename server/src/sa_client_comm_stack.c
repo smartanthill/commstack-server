@@ -94,10 +94,30 @@ int main_loop()
 	for (;;)
 	{
 wait_for_comm_event:
-//		ret_code = wait_for_communication_event( MEMORY_HANDLE_MAIN_LOOP_1, timer_val*100 ); // TODO: recalculation
-//		ret_code = wait_for_communication_event( timer_val*100 ); // TODO: recalculation
+		// [[QUICK CHECK FOR UNITS POTENTIALLY WAITING FOR TIMEOUT start]]
+		// we ask each potential unit; if it reports activity, let it continue; otherwise, ask a next one
+		// IMPORTANT: once an order of units is selected and tested, do not change it without extreme necessity
+
+		sa_get_time( &currt );
+
+		// 1. test GDP
+		ret_code = handler_sagdp_timer( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
+		if ( ret_code == SAGDP_RET_NEED_NONCE )
+		{
+			ret_code = handler_sasp_get_packet_id( nonce, SASP_NONCE_SIZE/*, &sasp_data*/ );
+			ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
+			sa_get_time( &currt );
+			ret_code = handler_sagdp_timer( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
+			ZEPTO_DEBUG_ASSERT( ret_code == SAGDP_RET_TO_LOWER_REPEATED );
+			zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+			goto saspsend;
+		}
+
+		// 2. (next candidate)
+
+		// [[QUICK CHECK FOR UNITS POTENTIALLY WAITING FOR TIMEOUT end]]
+
 		ret_code = wait_for_communication_event( &wait_for );
-//		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 //		ZEPTO_DEBUG_PRINTF_4( "=============================================Msg wait event; ret = %d, rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
 
 		switch ( ret_code )
@@ -134,59 +154,33 @@ wait_for_comm_event:
 			}
 			case COMMLAYER_RET_TIMEOUT:
 			{
-				// regular processing will be done below in the next block
-/*				ZEPTO_DEBUG_PRINTF_1( "no reply from device received; the last message (if any) will be resent by timer\n" );
-				// TODO: to think: why do we use here handler_sagdp_receive_request_resend_lsp() and not handlerSAGDP_timer()
+#if 0
+				// ZEPTO_DEBUG_PRINTF_1( "no reply received; the last message (if any) will be resent by timer\n" );
 				sa_get_time( &currt );
-				ret_code = handler_sagdp_timer( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, &sagdp_data );
+				ret_code = handler_sagdp_timer( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
 				if ( ret_code == SAGDP_RET_OK )
 				{
 					zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
-					continue;
+					goto wait_for_comm_event;
 				}
-				wake_time = 0;
-				if ( ret_code == SAGDP_RET_NEED_NONCE )
+				else if ( ret_code == SAGDP_RET_NEED_NONCE )
 				{
-					ret_code = handler_sasp_get_packet_id(  nonce, SASP_NONCE_SIZE, &sasp_data );
+					ret_code = handler_sasp_get_packet_id( nonce, SASP_NONCE_SIZE/*, &sasp_data*/ );
 					ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
 					sa_get_time( &currt );
-					ret_code = handler_sagdp_timer( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, &sagdp_data );
-					ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE && ret_code != SAGDP_RET_OK );
+					ret_code = handler_sagdp_timer( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
+					ZEPTO_DEBUG_ASSERT( ret_code == SAGDP_RET_TO_LOWER_REPEATED );
+					zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+					goto saspsend;
+					break;
 				}
-				zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
-
-				goto wait_for_comm_event;
-				break;*/
-//				if ( sagdp_data.event_type ) //TODO: temporary solution
-				if (1) //TODO: temporary solution
+				else
 				{
-					// ZEPTO_DEBUG_PRINTF_1( "no reply received; the last message (if any) will be resent by timer\n" );
-					sa_get_time( &currt );
-					ret_code = handler_sagdp_timer( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
-					if ( ret_code == SAGDP_RET_OK )
-					{
-						zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
-						goto wait_for_comm_event;
-					}
-					else if ( ret_code == SAGDP_RET_NEED_NONCE )
-					{
-						ret_code = handler_sasp_get_packet_id( nonce, SASP_NONCE_SIZE/*, &sasp_data*/ );
-						ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
-						sa_get_time( &currt );
-						ret_code = handler_sagdp_timer( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
-//			ZEPTO_DEBUG_PRINTF_1( "ret_code = %d\n", ret_code );
-//						ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE && ret_code != SAGDP_RET_OK );
-						ZEPTO_DEBUG_ASSERT( ret_code == SAGDP_RET_TO_LOWER_REPEATED );
-						zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
-						goto saspsend;
-						break;
-					}
-					else
-					{
-						ZEPTO_DEBUG_PRINTF_2( "ret_code = %d\n", ret_code );
-						ZEPTO_DEBUG_ASSERT( 0 );
-					}
+					ZEPTO_DEBUG_PRINTF_2( "ret_code = %d\n", ret_code );
+					ZEPTO_DEBUG_ASSERT( 0 );
 				}
+#endif // 0
+					
 				goto wait_for_comm_event;
 				break;
 			}
@@ -295,24 +289,23 @@ saoudp_in:
 
 		switch ( ret_code )
 		{
-#ifdef USED_AS_MASTER
 			case SAGDP_RET_OK:
 			{
 				ZEPTO_DEBUG_PRINTF_1( "master received unexpected or repeated packet. ignored\n" );
 				goto wait_for_comm_event;
 				break;
 			}
-#else
-			case SAGDP_RET_SYS_CORRUPTED:
-			{
-				// TODO: reinitialize all
-				goto wait_for_comm_event;
-				break;
-			}
-#endif
 			case SAGDP_RET_TO_HIGHER:
 			{
 				// regular processing will be done below, but we need to jump over
+				break;
+			}
+			case SAGDP_RET_SYS_CORRUPTED:
+			{
+				send_error_to_central_unit( MEMORY_HANDLE_MAIN_LOOP_1 );
+				sagdp_init();
+				ZEPTO_DEBUG_PRINTF_1( "Internal error. System is to be reinitialized\n" );
+				goto wait_for_comm_event;
 				break;
 			}
 #if 0

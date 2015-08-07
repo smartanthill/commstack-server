@@ -48,14 +48,14 @@ int main_loop()
 
 	// TODO: actual key loading, etc
 //	uint8_t AES_ENCRYPTION_KEY[16];
-//	memcpy( AES_ENCRYPTION_KEY, "16-byte fake key", 16 );
+//	ZEPTO_MEMCPY( AES_ENCRYPTION_KEY, "16-byte fake key", 16 );
 //	memset( AES_ENCRYPTION_KEY, 0xab, 16 );
 
 //	timeout_action tact;
 //	tact.action = 0;
 	sa_time_val currt;
 	waiting_for wait_for;
-	memset( &wait_for, 0, sizeof( waiting_for ) );
+	ZEPTO_MEMSET( &wait_for, 0, sizeof( waiting_for ) );
 	wait_for.wait_packet = 1;
 	TIME_MILLISECONDS16_TO_TIMEVAL( 1000, wait_for.wait_time ) //+++TODO: actual processing throughout the code
 
@@ -493,7 +493,7 @@ void set_port_from_command_line(int argc, char *argv[])
 	uint8_t i;
 	for ( i = 0; i<argc; i++ )
 	{
-		if ( memcmp( argv[i], "--port=", 7 ) == 0 )
+		if ( ZEPTO_MEMCMP( argv[i], "--port=", 7 ) == 0 )
 		{
 			int port = atoi( argv[i]+7);
 			ZEPTO_DEBUG_ASSERT( port >= 0 && port < 0x10000 );
@@ -508,7 +508,7 @@ char* get_persistent_storage_path_from_command_line(int argc, char *argv[])
 {
 	uint8_t i;
 	for ( i = 0; i<argc; i++ )
-		if ( memcmp( argv[i], "--psp=", 6 ) == 0 )
+		if ( ZEPTO_MEMCMP( argv[i], "--psp=", 6 ) == 0 )
 		{
 			ZEPTO_DEBUG_PRINTF_2( "persistent storage is at: \"%s\"\n", argv[i]+6 );
 			return argv[i]+6;

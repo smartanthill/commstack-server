@@ -37,4 +37,4 @@ install:
     - export PLATFORMIO_BUILD_FLAGS="-lrt -I$(pwd)/smartanthill2_0-embedded/firmware/src/hal_common"
 
 script:
-    - platformio run --project-dir=server --environment=native
+    - platformio run --project-dir=server -e native -e windows_x86

@@ -34,7 +34,7 @@ install:
 
     # Clone SmartAnthil Embedded Project (we need "hal_common" interface)
     - git clone https://github.com/smartanthill/smartanthill2_0-embedded.git
-    - export PLATFORMIO_BUILD_FLAGS="-lrt -I$(pwd)/smartanthill2_0-embedded/firmware/src/hal_common"
+    - export PLATFORMIO_BUILD_FLAGS="-I$(pwd)/smartanthill2_0-embedded/firmware/src/hal_common"
 
 script:
-    - platformio run --project-dir=server -e native -e windows_x86
+    - platformio run --project-dir=server -e linux_x86_64 -e windows_x86

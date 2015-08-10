@@ -21,7 +21,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #if defined _MSC_VER || defined __MINGW32__
 
-#include <Windows.h>
+#include <windows.h>
 
 void sa_get_time( sa_time_val* t )
 {

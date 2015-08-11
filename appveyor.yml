@@ -1,0 +1,26 @@
+build: off
+environment:
+  global:
+    WITH_COMPILER: "cmd /E:ON /V:ON /C .\\scripts\\appveyor\\run_with_compiler.cmd"
+  matrix:
+    - WINDOWS_SDK_VERSION: "v7.0"
+      PYTHON_HOME: "C:\\Python27-x64"
+      PYTHON_VERSION: "2.7"
+      PYTHON_ARCH: "64"
+
+install:
+  - "git submodule update --init --recursive"
+  - "powershell scripts\\appveyor\\install.ps1"
+
+  # update to 2.3.0 development snapshot
+  - '%WITH_COMPILER% %PYTHON_HOME%\\Scripts\\pip install https://github.com/platformio/platformio/archive/develop.zip'
+
+before_test:
+  - cmd: SET PATH=%PATH%;%PYTHON_HOME%;%PYTHON_HOME%\Scripts;C:\MinGW\bin
+
+  # Clone SmartAnthil Embedded Project (we need "hal_common" interface)
+  - cmd: git clone https://github.com/smartanthill/smartanthill2_0-embedded.git C:\smartanthill2_0-embedded
+  - cmd: SET PLATFORMIO_BUILD_FLAGS=-lwsock32 -IC:\\smartanthill2_0-embedded\\firmware\\src\\hal_common
+
+test_script:
+  - '%WITH_COMPILER% %PYTHON_HOME%\\Scripts\\platformio run --project-dir=server -e native'

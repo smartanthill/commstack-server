@@ -145,7 +145,7 @@ wait_for_comm_event:
 				{
 					// regular processing will be done below in the next block
 					zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
-					goto saoudp_in;
+					goto siotmp_rec;
 					break;
 				}
 				else
@@ -232,7 +232,7 @@ siotmp_rec:
 
 
 		// 2.1. Pass to SAoUDP
-saoudp_in:
+//saoudp_in:
 		ret_code = handler_saoudp_receive( MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR );
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 

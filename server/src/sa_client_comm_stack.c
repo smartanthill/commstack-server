@@ -22,6 +22,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <simpleiot/siot_oud_protocol.h>
 #include <simpleiot/siot_s_protocol.h>
 #include <simpleiot/siot_gd_protocol.h>
+#include <simpleiot/siot_m_protocol.h>
 //#include "saccp_protocol_client_side.h"
 //#include "test_generator.h"
 #include <stdio.h>
@@ -196,6 +197,38 @@ wait_for_comm_event:
 
 		ZEPTO_DEBUG_PRINTF_1("Message from server received\n");
 		ZEPTO_DEBUG_PRINTF_4( "ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
+
+
+		// 2.0. Pass to siot/mesh
+siotmp_rec:
+		ret_code = handler_siot_mesh_receive_packet( MEMORY_HANDLE_MAIN_LOOP_1 );
+		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+
+		switch ( ret_code )
+		{
+			case SIOT_MESH_RET_PASS_TO_PROCESS:
+			{
+				// regular processing will be done below in the next block
+				break;
+			}
+			case SIOT_MESH_RET_PASS_TO_SEND:
+			{
+				goto hal_send;
+				break;
+			}
+			case SIOT_MESH_RET_GARBAGE_RECEIVED:
+			{
+				goto wait_for_comm_event;
+				break;
+			}
+			default:
+			{
+				// unexpected ret_code
+				ZEPTO_DEBUG_PRINTF_2( "Unexpected ret_code %d\n", ret_code );
+				ZEPTO_DEBUG_ASSERT( 0 );
+				break;
+			}
+		}
 
 
 		// 2.1. Pass to SAoUDP
@@ -473,7 +506,28 @@ saoudp_send:
 			}
 		}
 
+
+		ret_code = handler_siot_mesh_send_packet( MEMORY_HANDLE_MAIN_LOOP_1, 0 ); // we can send it only to root, if we're slave TODO: think regarding second argument
+		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+
+		switch ( ret_code )
+		{
+			case SIOT_MESH_RET_OK:
+			{
+				// regular processing will be done below in the next block
+				break;
+			}
+			default:
+			{
+				// unexpected ret_code
+				ZEPTO_DEBUG_PRINTF_2( "Unexpected ret_code %d\n", ret_code );
+				ZEPTO_DEBUG_ASSERT( 0 );
+				break;
+			}
+		}
+
 		// send packet
+hal_send:
 		ret_code = send_message( MEMORY_HANDLE_MAIN_LOOP_1 );
 		zepto_parser_free_memory( MEMORY_HANDLE_MAIN_LOOP_1 );
 		if (ret_code != COMMLAYER_RET_OK )

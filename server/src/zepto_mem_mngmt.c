@@ -990,6 +990,7 @@ void memory_object_request_to_response( REQUEST_REPLY_HANDLE mem_h )
 
 void memory_object_response_to_request( REQUEST_REPLY_HANDLE mem_h )
 {
+zepto_mem_man_check_sanity();
 	uint8_t* ini_block = memory_objects[ mem_h ].ptr;
 	uint16_t ini_sz = memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
 	uint16_t trimmed_sz = memory_objects[ mem_h ].rq_size;
@@ -1524,7 +1525,7 @@ void zepto_parser_decode_uint( parser_obj* po, uint8_t* bytes_out, uint8_t targe
 	po->offset += (uint16_t)(end - buff);
 }
 
-uint16_t zepto_parse_encoded_uint8( parser_obj* po )
+uint8_t zepto_parse_encoded_uint8( parser_obj* po )
 {
 	uint8_t num_out;
 	zepto_parser_decode_uint( po, &num_out, 1 );

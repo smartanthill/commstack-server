@@ -37,7 +37,7 @@ DECLARE_AES_ENCRYPTION_KEY
 int main_loop()
 {
 	uint8_t pid[ SASP_NONCE_SIZE ];
-	uint8_t nonce[ SASP_NONCE_SIZE ];
+	sa_uint48_t nonce;
 
 #ifdef ENABLE_COUNTER_SYSTEM
 	INIT_COUNTER_SYSTEM
@@ -105,7 +105,7 @@ wait_for_comm_event:
 		ret_code = handler_sagdp_timer( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
 		if ( ret_code == SAGDP_RET_NEED_NONCE )
 		{
-			ret_code = handler_sasp_get_packet_id( nonce, SASP_NONCE_SIZE/*, &sasp_data*/ );
+			ret_code = handler_sasp_get_packet_id( nonce/*, &sasp_data*/ );
 			ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
 			sa_get_time( &currt );
 			ret_code = handler_sagdp_timer( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
@@ -166,7 +166,7 @@ wait_for_comm_event:
 				}
 				else if ( ret_code == SAGDP_RET_NEED_NONCE )
 				{
-					ret_code = handler_sasp_get_packet_id( nonce, SASP_NONCE_SIZE/*, &sasp_data*/ );
+					ret_code = handler_sasp_get_packet_id( nonce/*, &sasp_data*/ );
 					ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
 					sa_get_time( &currt );
 					ret_code = handler_sagdp_timer( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
@@ -259,9 +259,11 @@ siotmp_rec:
 
 		switch ( ret_code )
 		{
-			case SASP_RET_IGNORE:
+			case SASP_RET_IGNORE_PACKET_BROKEN:
+			case SASP_RET_IGNORE_PACKET_LAST_REPEATED:
+			case SASP_RET_IGNORE_PACKET_OLD_NONCE_NA:
 			{
-				ZEPTO_DEBUG_PRINTF_1( "BAD MESSAGE_RECEIVED\n" );
+				ZEPTO_DEBUG_PRINTF_1( "SASP: ignoring packet\n" );
 				goto wait_for_comm_event;
 				break;
 			}
@@ -287,7 +289,7 @@ siotmp_rec:
 				}
 				else if ( ret_code == SAGDP_RET_NEED_NONCE )
 				{
-					ret_code = handler_sasp_get_packet_id(  nonce, SASP_NONCE_SIZE/*, &sasp_data*/ );
+					ret_code = handler_sasp_get_packet_id( nonce/*, &sasp_data*/ );
 					ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
 					sa_get_time( &currt );
 					ret_code = handler_sagdp_receive_request_resend_lsp( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
@@ -311,7 +313,7 @@ siotmp_rec:
 		ret_code = handler_sagdp_receive_up( &currt, &wait_for, NULL, pid, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
 		if ( ret_code == SAGDP_RET_NEED_NONCE )
 		{
-			ret_code = handler_sasp_get_packet_id(  nonce, SASP_NONCE_SIZE/*, &sasp_data*/ );
+			ret_code = handler_sasp_get_packet_id( nonce/*, &sasp_data*/ );
 			ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
 			sa_get_time( &currt );
 			ret_code = handler_sagdp_receive_up( &currt, &wait_for, nonce, pid, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
@@ -429,7 +431,7 @@ siotmp_rec:
 		ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );
 		if ( ret_code == SAGDP_RET_NEED_NONCE )
 		{
-			ret_code = handler_sasp_get_packet_id(  nonce, SASP_NONCE_SIZE/*, &sasp_data*/ );
+			ret_code = handler_sasp_get_packet_id( nonce/*, &sasp_data*/ );
 			ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
 			sa_get_time( &currt );
 			ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );

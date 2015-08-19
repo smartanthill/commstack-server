@@ -18,7 +18,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "commstack_commlayer.h"
 #include <stdio.h>
 
-#define MAX_PACKET_SIZE 50
+#define MAX_PACKET_SIZE 80
 
 
 #include <stdio.h>

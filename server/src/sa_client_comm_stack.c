@@ -261,7 +261,7 @@ siotmp_rec:
 		{
 			case SASP_RET_IGNORE_PACKET_BROKEN:
 			case SASP_RET_IGNORE_PACKET_LAST_REPEATED:
-			case SASP_RET_IGNORE_PACKET_OLD_NONCE_NA:
+			case SASP_RET_IGNORE_PACKET_NONCE_LS_NOT_APPLIED:
 			{
 				ZEPTO_DEBUG_PRINTF_1( "SASP: ignoring packet\n" );
 				goto wait_for_comm_event;
@@ -509,7 +509,7 @@ saoudp_send:
 		}
 
 
-		ret_code = handler_siot_mesh_send_packet( MEMORY_HANDLE_MAIN_LOOP_1, 0 ); // we can send it only to root, if we're slave TODO: think regarding second argument
+		ret_code = handler_siot_mesh_send_packet( MEMORY_HANDLE_MAIN_LOOP_1, 1 ); // currently we know only about a single client with id=1
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 
 		switch ( ret_code )

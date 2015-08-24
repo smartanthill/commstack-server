@@ -28,7 +28,7 @@ python:
     - "2.7"
 
 install:
-    # - python -c "$(curl -fsSL https://raw.githubusercontent.com/platformio/platformio/master/scripts/get-platformio.py)"
+    - python -c "$(curl -fsSL https://raw.githubusercontent.com/platformio/platformio/develop/scripts/get-platformio.py)"
     # Use 2.3.0 development snapshot (it has support for desktop platforms)
     - pip install https://github.com/platformio/platformio/archive/develop.zip
 

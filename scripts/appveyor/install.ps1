@@ -54,17 +54,12 @@ function InstallPython ($python_version, $architecture, $python_home) {
 
 
 function InstallPip ($python_home) {
-    $pip_path = $python_home + "/Scripts/pip.exe"
     $python_path = $python_home + "/python.exe"
-    if (-not(Test-Path $pip_path)) {
-        Write-Host "Installing pip..."
-        $webclient = New-Object System.Net.WebClient
-        $webclient.DownloadFile($GET_PIP_URL, $GET_PIP_PATH)
-        Write-Host "Executing:" $python_path $GET_PIP_PATH
-        Start-Process -FilePath "$python_path" -ArgumentList "$GET_PIP_PATH" -Wait -Passthru
-    } else {
-        Write-Host "pip already installed."
-    }
+    Write-Host "Installing pip..."
+    $webclient = New-Object System.Net.WebClient
+    $webclient.DownloadFile($GET_PIP_URL, $GET_PIP_PATH)
+    Write-Host "Executing:" $python_path $GET_PIP_PATH
+    Start-Process -FilePath "$python_path" -ArgumentList "$GET_PIP_PATH" -Wait -Passthru
 }
 
 function InstallPackage ($python_home, $pkg) {
@@ -72,19 +67,11 @@ function InstallPackage ($python_home, $pkg) {
     & $pip_path install -U $pkg
 }
 
-function InstallScons ($python_home) {
-    Write-Host "Start installing Scons"
-    $pip_path = $python_home + "/Scripts/pip.exe"
-    & $pip_path install --egg "http://dl.platformio.org/scons.zip"
-    Write-Host "Scons installed"
-}
-
 function main () {
     InstallPython $env:PYTHON_VERSION $env:PYTHON_ARCH $env:PYTHON_HOME
     InstallPip $env:PYTHON_HOME
     InstallPackage $env:PYTHON_HOME setuptools
     InstallPackage $env:PYTHON_HOME platformio
-    InstallScons $env:PYTHON_HOME
 }
 
 main

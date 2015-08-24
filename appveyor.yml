@@ -12,7 +12,7 @@ install:
   - "git submodule update --init --recursive"
   - "powershell scripts\\appveyor\\install.ps1"
 
-  # update to 2.3.0 development snapshot
+  # Use 2.3.0 development snapshot (it has support for desktop platforms)
   - '%WITH_COMPILER% %PYTHON_HOME%\\Scripts\\pip install https://github.com/platformio/platformio/archive/develop.zip'
 
 before_test:

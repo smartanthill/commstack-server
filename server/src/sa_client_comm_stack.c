@@ -74,8 +74,8 @@ int main_loop()
 	SASP_DATA sasp_data;
 	sagdp_init( &sagdp_data );
 	sasp_init_at_lifestart( &sasp_data );*/
+	sasp_restore_from_backup();
 	sagdp_init();
-	sasp_init_at_lifestart();
 
 	// Try to initialize connection
 	if ( !communication_initialize() )
@@ -200,7 +200,8 @@ wait_for_comm_event:
 
 
 		// 2.0. Pass to siot/mesh
-siotmp_rec:
+	siotmp_rec:
+#if SIOT_MESH_IMPLEMENTATION_WORKS
 		ret_code = handler_siot_mesh_receive_packet( MEMORY_HANDLE_MAIN_LOOP_1 );
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 
@@ -229,7 +230,7 @@ siotmp_rec:
 				break;
 			}
 		}
-
+#endif
 
 		// 2.1. Pass to SAoUDP
 //saoudp_in:
@@ -508,7 +509,7 @@ saoudp_send:
 			}
 		}
 
-
+#if SIOT_MESH_IMPLEMENTATION_WORKS
 		ret_code = handler_siot_mesh_send_packet( MEMORY_HANDLE_MAIN_LOOP_1, 1 ); // currently we know only about a single client with id=1
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 
@@ -527,6 +528,7 @@ saoudp_send:
 				break;
 			}
 		}
+#endif
 
 		// send packet
 hal_send:
@@ -595,12 +597,17 @@ int main(int argc, char *argv[])
 		}
 		case HAL_PS_INIT_OK:
 		{
-			ZEPTO_DEBUG_PRINTF_1( "init_eeprom_access() passed\n" );
+			ZEPTO_DEBUG_PRINTF_1( "hal_init_eeprom_access() passed\n" );
+			if ( !eeprom_check_at_start() ) // corrupted data; so far, at least one of slots cannot be recovered
+			{
+				sasp_init_eeprom_data_at_lifestart();
+			}
 			break;
 		}
 		case HAL_PS_INIT_OK_NEEDS_INITIALIZATION:
 		{
-			format_eeprom_at_lifestart();
+//			format_eeprom_at_lifestart();
+			sasp_init_eeprom_data_at_lifestart();
 			ZEPTO_DEBUG_PRINTF_1( "format_eeprom_at_lifestart() passed\n" );
 			break;
 		}

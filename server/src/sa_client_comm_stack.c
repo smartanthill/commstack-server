@@ -586,6 +586,8 @@ int main(int argc, char *argv[])
 	// TODO: logic of accessing/intializing persistent storage must be totally revised toward more secure version
 //	if (!init_eeprom_access())
 //		return 0;
+	uint8_t rid[DATA_REINCARNATION_ID_SIZE];
+	ZEPTO_MEMCPY( rid, AES_ENCRYPTION_KEY, DATA_REINCARNATION_ID_SIZE );
 	char* persistent_storage_path = get_persistent_storage_path_from_command_line( argc, argv );
 	uint8_t ret_code = hal_init_eeprom_access( persistent_storage_path );
 	switch ( ret_code )
@@ -598,16 +600,48 @@ int main(int argc, char *argv[])
 		case HAL_PS_INIT_OK:
 		{
 			ZEPTO_DEBUG_PRINTF_1( "hal_init_eeprom_access() passed\n" );
-			if ( !eeprom_check_at_start() ) // corrupted data; so far, at least one of slots cannot be recovered
+/*			if ( !eeprom_check_at_start() ) // corrupted data; so far, at least one of slots cannot be recovered
 			{
 				sasp_init_eeprom_data_at_lifestart();
+			}*/
+			ret_code = eeprom_check_reincarnation( rid );
+			switch ( ret_code )
+			{
+				case EEPROM_RET_REINCARNATION_ID_OLD:
+				{
+					sasp_init_eeprom_data_at_lifestart();
+					eeprom_update_reincarnation_if_necessary( rid );
+					break;
+				}
+				case EEPROM_RET_REINCARNATION_ID_OK_ONE_OK:
+				{
+					if ( !eeprom_check_at_start() ) // corrupted data; so far, at least one of slots cannot be recovered
+					{
+						sasp_init_eeprom_data_at_lifestart();
+					}
+					eeprom_update_reincarnation_if_necessary( rid );
+					break;
+				}
+				case EEPROM_RET_REINCARNATION_ID_OK_BOTH_OK:
+				{
+					if ( !eeprom_check_at_start() ) // corrupted data; so far, at least one of slots cannot be recovered
+					{
+						sasp_init_eeprom_data_at_lifestart();
+					}
+					break;
+				}
+				default:
+				{
+					ZEPTO_DEBUG_ASSERT( 0 == "Unexpected ret code" );
+					break;
+				}
 			}
 			break;
 		}
 		case HAL_PS_INIT_OK_NEEDS_INITIALIZATION:
 		{
-//			format_eeprom_at_lifestart();
 			sasp_init_eeprom_data_at_lifestart();
+			eeprom_update_reincarnation_if_necessary( rid );
 			ZEPTO_DEBUG_PRINTF_1( "format_eeprom_at_lifestart() passed\n" );
 			break;
 		}

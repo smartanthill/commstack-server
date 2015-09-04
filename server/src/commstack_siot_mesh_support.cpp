@@ -58,17 +58,19 @@ typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE
 {
 	uint16_t device_id;
 	uint16_t prev_device_id; // previous device on the way; as soon as a current device is successfully updated previous device has a chance to become 'last' (note: a devive can be 'prev' for more than a single device)
-	uint16_t next_device_id; // has a valid value, if !is_last
+//	uint16_t next_device_id; // has a valid value, if !is_last
+	bool check_path_first; // set to true for a device that has no route to yet (note: this status is set when update is added and MAY change only when root routing table is updated)
 	bool is_last; // between operations this value must be up-to-date
 	bool in_progress; // true in the time range between the request to update has been sent, and confirmation is received; before this period requests to the same device can be merged; after the end of this period the request is removed from the set of outstanding requests
 	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table;
 	SIOT_M_LINK_TABLE_TYPE siot_m_link_table;
 } SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE;
 
-typedef list< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE > SIOT_MESH_ROUTING_DATA_UPDATES;
-typedef list< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE >::iterator SIOT_MESH_ROUTING_DATA_UPDATES_ITERATOR;
+typedef vector< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE > SIOT_MESH_ROUTING_DATA_UPDATES;
+typedef list< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE > SIOT_MESH_ALL_ROUTING_DATA_UPDATES;
+typedef list< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE >::iterator SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR;
 
-SIOT_MESH_ROUTING_DATA_UPDATES mesh_routing_data_updates;
+SIOT_MESH_ALL_ROUTING_DATA_UPDATES mesh_routing_data_updates;
 
 #define SIOT_MESH_AT_ROOT_RET_OK 0
 #define SIOT_MESH_AT_ROOT_RET_FAILED 1
@@ -120,7 +122,8 @@ void siot_mesh_at_root_siot_mesh_at_root_init_route_update_data( SIOT_MESH_DEVIC
 	update->in_progress = false;
 	update->is_last = false;
 	update->prev_device_id = prev_device_id;
-	update->next_device_id = 0;
+//	update->next_device_id = 0;
+	update->check_path_first = false;
 }
 
 uint8_t siot_mesh_at_root_get_list_of_updated_devices( SIOT_MESH_ROUTING_DATA_UPDATES& update_list, uint16_t id_target, uint16_t id_from, uint16_t id_to /*more data may be required*/ )
@@ -130,14 +133,21 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices( SIOT_MESH_ROUTING_DATA_UP
 	SIOT_MESH_ROUTE route;
 	SIOT_MESH_LINK link;
 	route.TARGET_ID = id_target;
-	uint16_t dev_id = 0, prev_dev_id;
+	uint16_t dev_id, prev_dev_id;
 	uint16_t i, j;
 	update_list.clear();
 	ZEPTO_DEBUG_ASSERT( mesh_routing_data.size() && mesh_routing_data[0].device_id == 0 );
-	// get all chain down starting from ROOT...
-	do
+
+	// 1. Collect necessary changes
+
+	// adding items for all devices from ROOT to the predecessor of id_from
+	dev_id = 0;
+	prev_dev_id = 0;;
+	while ( dev_id != id_from )
 	{
-		prev_dev_id = dev_id;
+#ifdef SA_DEBUG
+		bool next_found = false;
+#endif // SA_DEBUG
 		siot_mesh_at_root_siot_mesh_at_root_init_route_update_data( &update, dev_id, prev_dev_id );
 		siot_mesh_at_root_get_device_data( dev_id, rd_it );
 		for ( i=0; i<rd_it->siot_m_route_table.size(); i++ )
@@ -148,17 +158,25 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices( SIOT_MESH_ROUTING_DATA_UP
 				for ( j=0; j<rd_it->siot_m_link_table.size(); j++ )
 					if ( rd_it->siot_m_link_table[j].LINK_ID == rd_it->siot_m_route_table[i].LINK_ID )
 					{
+						prev_dev_id = dev_id;
 						dev_id = rd_it->siot_m_link_table[i].NEXT_HOP;
+#ifdef SA_DEBUG
+						next_found = true;
+#endif // SA_DEBUG
 						break;
 					}
 				break;
 			}
 		update_list.push_back( update );
+#ifdef SA_DEBUG
+		ZEPTO_DEBUG_ASSERT( next_found );
+		ZEPTO_DEBUG_ASSERT( prev_dev_id != dev_id );
+#endif // SA_DEBUG
 	}
-	while ( dev_id != id_from );
 
 	// the last device (as well as a target device) should receive LINK record; and we need to somehow assign a LINK_ID on a target device
 
+	// adding item for the last retransmitter
 	siot_mesh_at_root_get_device_data( id_from, rd_it );
 	link.LINK_ID = 0;
 	for ( j=0; j<rd_it->siot_m_link_table.size(); j++ )
@@ -172,18 +190,79 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices( SIOT_MESH_ROUTING_DATA_UP
 	siot_mesh_at_root_siot_mesh_at_root_init_route_update_data( &update, id_from, dev_id );
 	update.siot_m_link_table.push_back( link );
 	update.siot_m_route_table.push_back( route);
+	update.is_last = true; // within current collection
 	update_list.push_back( update );
 
+	// additing item for the target device
+	// TODO: (!!!) INFORMATION IS MISSING: physics of retransmission
+	link.LINK_ID = 0;
+	link.NEXT_HOP = id_to;
+	route.LINK_ID = link.LINK_ID;
+	route.TARGET_ID = 0;
+	siot_mesh_at_root_siot_mesh_at_root_init_route_update_data( &update, id_target, id_from );
+	update.is_last = true; // within current collection
+	update.check_path_first = true;
+	update_list.push_back( update );
 
+	return SIOT_MESH_AT_ROOT_RET_OK;
+}
+
+uint8_t siot_mesh_at_root_merge_route_table_updates( SIOT_M_ROUTE_TABLE_TYPE& present_changes, SIOT_M_ROUTE_TABLE_TYPE& new_changes )
+{
+	// TODO: implement
+	return SIOT_MESH_AT_ROOT_RET_OK;
+}
+
+uint8_t siot_mesh_at_root_merge_link_table_updates( SIOT_M_LINK_TABLE_TYPE& present_changes, SIOT_M_LINK_TABLE_TYPE& new_changes )
+{
+	// TODO: implement
+	return SIOT_MESH_AT_ROOT_RET_OK;
+}
+
+uint8_t siot_mesh_at_root_add_updates( SIOT_MESH_ROUTING_DATA_UPDATES& update_list )
+{
+	// we start from the end of the list and add updates one by one;
+	// if an update to the same device is already in the set of updates and is not in progress, we merge updates
+	uint16_t i;
+	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it;
+	for ( i=update_list.size(); i; i-- )
+	{
+		bool added = false;
+		for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
+		{
+	//		SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE& cu = update_list[i-1];
+			if ( update_list[i].device_id == it->device_id )
+			{
+				if ( ! it->in_progress ) // we can merge
+				{
+					siot_mesh_at_root_merge_route_table_updates( it->siot_m_route_table, update_list[i].siot_m_route_table );
+					siot_mesh_at_root_merge_link_table_updates( it->siot_m_link_table, update_list[i].siot_m_link_table );
+					// TODO: process is_last flag
+				}
+				else
+				{
+					// TODO: process is_last flag
+					mesh_routing_data_updates.push_back( update_list[i] );
+				}
+			}
+			added = true;
+			break;
+		}
+		if ( !added )
+		{
+			// TODO: process is_last flag
+			mesh_routing_data_updates.push_back( update_list[i] );
+		}
+	}
 
 	return 0;
 }
 
-
 ///////////////////   Basic calls: device list  //////////////////////
 
-uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ROUTING_DATA_UPDATES_ITERATOR& it )
+uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& it )
 {
+	// TODO: revize implementation
 	if ( mesh_routing_data_updates.begin() == mesh_routing_data_updates.end() )
 		return SIOT_MESH_AT_ROOT_RET_NO_UPDATES;
 	for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
@@ -194,8 +273,10 @@ uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ROUTING_DATA_UPDATES_ITERAT
 
 uint8_t siot_mesh_at_root_update_done( uint16_t device_id )
 {
+	// TODO: revize implementation
+	
 	// basically we need to do three main things: to apply the update to the local copy of routing table, to update (and check) remaining items, and to remove the item
-	SIOT_MESH_ROUTING_DATA_UPDATES_ITERATOR it, it1, it2;
+	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it, it1, it2;
 	for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
 		if ( it->device_id == device_id && it->in_progress ) // note: while current update was 'in progress', other updates of the same device could be added to the collection; and they could not be merged with one already being in progress; thus they will stay with status !in_progress
 		{

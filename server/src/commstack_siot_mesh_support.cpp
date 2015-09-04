@@ -87,6 +87,44 @@ SIOT_MESH_ALL_ROUTING_DATA_UPDATES mesh_routing_data_updates;
 #define SIOT_MESH_AT_ROOT_RET_NO_UPDATES 4
 #define SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES 5
 
+///////////////////   DEBUG and VERIFICATIONS   //////////////////////
+
+void dbg_siot_mesh_at_root_validate_device_tables( SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* data )
+{
+	uint16_t i, j;
+
+	// target IDs in the route table are in increasing order
+	for ( i=1; i<data->siot_m_route_table.size(); i++ )
+		ZEPTO_DEBUG_ASSERT( data->siot_m_route_table[ i - 1 ].TARGET_ID < data->siot_m_route_table[ i ].TARGET_ID );
+
+	// link IDs in the link table are in increasing order
+	for ( i=1; i<data->siot_m_link_table.size(); i++ )
+		ZEPTO_DEBUG_ASSERT( data->siot_m_link_table[ i - 1 ].LINK_ID < data->siot_m_link_table[ i ].LINK_ID );
+
+	// link ID in the route table correspond to an entry in the link table
+	for ( i=0; i<data->siot_m_route_table.size(); i++ )
+	{
+		bool found = false;
+		for ( j=0; j<data->siot_m_link_table.size(); j++ )
+			if ( data->siot_m_route_table[i].LINK_ID == data->siot_m_link_table[j].LINK_ID )
+			{
+				found = true;
+				break;
+			}
+			else if ( data->siot_m_route_table[i].LINK_ID > data->siot_m_link_table[j].LINK_ID ) // because of canonicity means "not found"
+				break;
+		if ( ! found )
+			ZEPTO_DEBUG_ASSERT( 0 == "LINK_ID in the route table corresponds to nothing in the link table" );
+	}
+}
+
+void dbg_siot_mesh_at_root_validate_all_device_tables()
+{
+	SIOT_MESH_ROUTING_DATA_ITERATOR it;
+	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )
+		dbg_siot_mesh_at_root_validate_device_tables( &*it );
+}
+
 ///////////////////   Basic calls: device list  //////////////////////
 
 uint8_t siot_mesh_at_root_add_device( uint16_t device_id )
@@ -257,14 +295,8 @@ uint8_t siot_mesh_at_root_merge_route_and_link_table_updates( SIOT_M_ROUTE_TABLE
 
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
-/*
-uint8_t siot_mesh_at_root_merge_link_table_updates( )
-{
-	// TODO: implement
-	return SIOT_MESH_AT_ROOT_RET_OK;
-}
-*/
-uint8_t siot_mesh_at_root_add_updates( SIOT_MESH_ROUTING_DATA_UPDATES& update_list )
+
+uint8_t siot_mesh_at_root_add_or_merge_updates( SIOT_MESH_ROUTING_DATA_UPDATES& update_list )
 {
 	// we start from the end of the list and add updates one by one;
 	// if an update to the same device is already in the set of updates and is not in progress, we merge updates
@@ -275,13 +307,10 @@ uint8_t siot_mesh_at_root_add_updates( SIOT_MESH_ROUTING_DATA_UPDATES& update_li
 		bool added = false;
 		for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
 		{
-	//		SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE& cu = update_list[i-1];
 			if ( update_list[i].device_id == it->device_id )
 			{
 				if ( ! it->in_progress ) // we can merge
 				{
-//					siot_mesh_at_root_merge_route_table_updates( it->siot_m_route_table_update, update_list[i].siot_m_route_table_update );
-//					siot_mesh_at_root_merge_link_table_updates( it->siot_m_link_table, update_list[i].siot_m_link_table );
 					siot_mesh_at_root_merge_route_and_link_table_updates( it->siot_m_route_table_update, update_list[i].siot_m_route_table_update,  it->siot_m_link_table_update, update_list[i].siot_m_link_table_update );
 					it->is_last = it->is_last && update_list[i].is_last;
 				}
@@ -304,15 +333,68 @@ uint8_t siot_mesh_at_root_add_updates( SIOT_MESH_ROUTING_DATA_UPDATES& update_li
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
-uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& it )
+uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
 {
 	// TODO: here we assume that is_last is set correctly (and should be updated at time of item adding/removal). Think whether this assumption is practically good (seems to be, indeed...).
 	if ( mesh_routing_data_updates.begin() == mesh_routing_data_updates.end() )
 		return SIOT_MESH_AT_ROOT_RET_NO_UPDATES;
-	for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
-		if ( it->is_last && (!it->in_progress) )
+	for ( update = mesh_routing_data_updates.begin(); update != mesh_routing_data_updates.end(); ++update )
+		if ( update->is_last && (!update->in_progress) )
 			return SIOT_MESH_AT_ROOT_RET_OK;
 	return SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES;
+}
+
+uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
+{
+	SIOT_MESH_ROUTING_DATA_ITERATOR dev_data;
+	siot_mesh_at_root_get_device_data( update->device_id, dev_data );
+	ZEPTO_DEBUG_ASSERT( update->device_id == dev_data->device_id );
+
+	uint16_t i, j;
+
+	for ( i=0; i<update->siot_m_route_table_update.size(); i++ )
+	{
+		bool applied = false;
+		for ( j=0; j<dev_data->siot_m_route_table.size(); j++ )
+			if ( dev_data->siot_m_route_table[j].TARGET_ID == update->siot_m_route_table_update[i].TARGET_ID )
+			{
+				dev_data->siot_m_route_table[j].LINK_ID = update->siot_m_route_table_update[i].LINK_ID;
+				applied = true;
+				break;
+			}
+			else if ( dev_data->siot_m_route_table[j].TARGET_ID < update->siot_m_route_table_update[i].TARGET_ID ) // as soon as.... (we exploit canonicity here)
+			{
+				dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin() + j, update->siot_m_route_table_update[i] );
+			}
+		if ( !applied ) // something new
+		{
+			ZEPTO_DEBUG_ASSERT( dev_data->siot_m_route_table.size() == 0 || dev_data->siot_m_route_table[ dev_data->siot_m_route_table.size() - 1 ].TARGET_ID < update->siot_m_route_table_update[i].TARGET_ID );
+			dev_data->siot_m_route_table.push_back( update->siot_m_route_table_update[i] );
+		}
+	}
+
+	for ( i=0; i<update->siot_m_link_table_update.size(); i++ )
+	{
+		bool applied = false;
+		for ( j=0; j<dev_data->siot_m_link_table.size(); j++ )
+			if ( dev_data->siot_m_link_table[j].LINK_ID == update->siot_m_link_table_update[i].LINK_ID )
+			{
+				dev_data->siot_m_link_table[j].LINK_ID = update->siot_m_link_table_update[i].LINK_ID;
+				applied = true;
+				break;
+			}
+			else if ( dev_data->siot_m_link_table[j].LINK_ID < update->siot_m_link_table_update[i].LINK_ID ) // as soon as.... (we exploit canonicity here)
+			{
+				dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin() + j, update->siot_m_link_table_update[i] );
+			}
+		if ( !applied ) // something new
+		{
+			ZEPTO_DEBUG_ASSERT( dev_data->siot_m_link_table.size() == 0 || dev_data->siot_m_link_table[ dev_data->siot_m_link_table.size() - 1 ].LINK_ID < update->siot_m_link_table_update[i].LINK_ID );
+			dev_data->siot_m_link_table.push_back( update->siot_m_link_table_update[i] );
+		}
+	}
+
+	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
 uint8_t siot_mesh_at_root_update_done( uint16_t device_id )
@@ -332,7 +414,8 @@ uint8_t siot_mesh_at_root_update_done( uint16_t device_id )
 			ZEPTO_DEBUG_ASSERT( cnt == 1 ); // only a single update to the same device can be in progress
 #endif // SA_DEBUG
 
-			// TODO: APPLY UPDATE TO THE RESPECTIVE LOCAL COPY
+			// apply update to the respective local copy
+			siot_mesh_at_root_apply_update_to_local_copy( it );
 
 			// put collection of updates in a consistent state: get a list of updates for devices 'previous' to current (TODO: can it be more than a single one?)
 			if ( it->device_id != 0 )

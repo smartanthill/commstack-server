@@ -29,8 +29,6 @@ python:
 
 install:
     - python -c "$(curl -fsSL https://raw.githubusercontent.com/platformio/platformio/develop/scripts/get-platformio.py)"
-    # Use 2.3.0 development snapshot (it has support for desktop platforms)
-    - pip install https://github.com/platformio/platformio/archive/develop.zip
 
     # Clone SmartAnthil Embedded Project (we need "hal_common" interface)
     - git clone https://github.com/smartanthill/smartanthill2_0-embedded.git

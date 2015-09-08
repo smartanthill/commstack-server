@@ -202,7 +202,7 @@ wait_for_comm_event:
 		// 2.0. Pass to siot/mesh
 	siotmp_rec:
 #if SIOT_MESH_IMPLEMENTATION_WORKS
-		ret_code = handler_siot_mesh_receive_packet( MEMORY_HANDLE_MAIN_LOOP_1 );
+		ret_code = handler_siot_mesh_receive_packet( MEMORY_HANDLE_MAIN_LOOP_1, 0 ); // TODO: add actual connection quality
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 
 		switch ( ret_code )
@@ -510,7 +510,8 @@ saoudp_send:
 		}
 
 #if SIOT_MESH_IMPLEMENTATION_WORKS
-		ret_code = handler_siot_mesh_send_packet( MEMORY_HANDLE_MAIN_LOOP_1, 1 ); // currently we know only about a single client with id=1
+		uint16_t link_id;
+		ret_code = handler_siot_mesh_send_packet( MEMORY_HANDLE_MAIN_LOOP_1, 1, &link_id ); // currently we know only about a single client with id=1
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 
 		switch ( ret_code )
@@ -532,6 +533,7 @@ saoudp_send:
 
 		// send packet
 hal_send:
+		ZEPTO_DEBUG_ASSERT( link_id == 0 ); // TODO: link_id must be a part of send_packet() call; we are now just in the middle of development...
 		ret_code = send_message( MEMORY_HANDLE_MAIN_LOOP_1 );
 		zepto_parser_free_memory( MEMORY_HANDLE_MAIN_LOOP_1 );
 		if (ret_code != COMMLAYER_RET_OK )

@@ -16,6 +16,7 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 //#include "commstack_siot_mesh_support.h"
 #include <simpleiot/siot_m_protocol.h>
+#include <simpleiot_hal/siot_mem_mngmt.h>
 
 // items below were defined for various reasons in this projec;
 // STL does not like such redefinitions (see <xkeycheck.h> for details); we do favor for STL
@@ -81,13 +82,6 @@ typedef list< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE >::iterator SIOT_MESH_ALL_ROU
 
 SIOT_MESH_ALL_ROUTING_DATA_UPDATES mesh_routing_data_updates;
 
-#define SIOT_MESH_AT_ROOT_RET_OK 0
-#define SIOT_MESH_AT_ROOT_RET_FAILED 1
-#define SIOT_MESH_AT_ROOT_RET_ALREADY_EXISTS 2
-#define SIOT_MESH_AT_ROOT_RET_NOT_FOUND 3
-#define SIOT_MESH_AT_ROOT_RET_NO_UPDATES 4
-#define SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES 5
-
 ///////////////////   DEBUG and VERIFICATIONS   //////////////////////
 
 void dbg_siot_mesh_at_root_validate_device_tables( SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* data )
@@ -130,6 +124,10 @@ void dbg_siot_mesh_at_root_validate_all_device_tables()
 
 void siot_mesh_init_tables()  // TODO: this call reflects current development stage and may or may not survive in the future
 {
+	// as soon as pairing is implemented below code will be removed
+	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA data;
+	data.device_id = 0;
+	mesh_routing_data.push_back( data );
 }
 
 ///////////////////   Basic calls: device list  //////////////////////
@@ -363,9 +361,36 @@ uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_IT
 	return SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES;
 }
 
-uint8_t siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
+void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
 {
-	return SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES;
+	uint16_t i;
+	uint16_t header;
+	for ( i=0; i<update->siot_m_route_table_update.size(); i++ )
+	{
+		// | ADD-OR-MODIFY-ROUTE-ENTRY-AND-LINK-ID | TARGET-ID |
+		header = ADD_OR_MODIFY_LINK_ENTRY | ( update->siot_m_route_table_update[i].LINK_ID << 3 );
+		zepto_parser_encode_and_append_uint16( mem_h, header );
+		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_route_table_update[i].TARGET_ID );
+	}
+	for ( i=0; i<update->siot_m_link_table_update.size(); i++ )
+	{
+		// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
+		header = ADD_OR_MODIFY_LINK_ENTRY | ( update->siot_m_route_table_update[i].LINK_ID << 4 );
+		zepto_parser_encode_and_append_uint16( mem_h, header );
+		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].BUS_ID );
+		zepto_parser_encode_and_append_uint32( mem_h, update->siot_m_link_table_update[i].BUS_ID ); // intra-bus id
+	}
+}
+
+uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h )
+{
+	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR update;
+	uint8_t ret_code;
+	ret_code = siot_mesh_at_root_get_next_update( update );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
+		return ret_code;
+	siot_mesh_at_root_update_to_packet( mem_h, update );
+	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
 uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
@@ -587,7 +612,7 @@ void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_a
 #define SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
 #define SIOT_MESH_IS_QUALITY_OF_FIRST_INOUT_CONNECTION_BETTER( in1, out1, in2, out2 ) ( (in1<in2)||((in1==in2)&&(out1<out2)) ) /*TODO: this is a quick solution; think about better ones*/
 
-uint16_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
+uint8_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
 {
 	uint16_t i, j, k;
 	uint16_t last_in, last_out;
@@ -623,7 +648,7 @@ uint16_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id
 	return SIOT_MESH_AT_ROOT_RET_FAILED;
 }
 
-uint16_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id )
+uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id )
 {
 	uint16_t i;
 	for ( i=0; i<last_hops_of_all_devices.size(); i++ )

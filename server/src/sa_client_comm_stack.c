@@ -115,6 +115,17 @@ wait_for_comm_event:
 		}
 
 		// 2. (next candidate)
+		ret_code = handler_siot_mesh_timer( &currt, &wait_for, MEMORY_HANDLE_MAIN_LOOP_1 );
+		switch ( ret_code )
+		{
+			case SIOT_MESH_RET_PASS_TO_CCP:
+			{
+				// quite dirty and temporary solution
+				zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+				goto sagdpsend;
+				break;
+			}
+		}
 
 		// [[QUICK CHECK FOR UNITS POTENTIALLY WAITING FOR TIMEOUT end]]
 
@@ -427,6 +438,7 @@ wait_for_comm_event:
 #endif
 
 		// 5. SAGDP
+sagdpsend:
 		ZEPTO_DEBUG_PRINTF_3( "@client_received: rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
 		sa_get_time( &currt );
 		ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR/*, &sagdp_data*/ );

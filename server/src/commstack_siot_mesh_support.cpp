@@ -223,6 +223,7 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices( SIOT_MESH_ROUTING_DATA_UP
 					}
 				break;
 			}
+		ZEPTO_DEBUG_ASSERT( update.siot_m_link_table_update.size() || update.siot_m_route_table_update.size() );
 		update_list.push_back( update );
 #ifdef SA_DEBUG
 		ZEPTO_DEBUG_ASSERT( next_found );
@@ -248,6 +249,7 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices( SIOT_MESH_ROUTING_DATA_UP
 	update.siot_m_link_table_update.push_back( link );
 	update.siot_m_route_table_update.push_back( route);
 	update.is_last = true; // within current collection
+	ZEPTO_DEBUG_ASSERT( update.siot_m_link_table_update.size() || update.siot_m_route_table_update.size() );
 	update_list.push_back( update );
 
 	// additing item for the target device
@@ -258,8 +260,11 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices( SIOT_MESH_ROUTING_DATA_UP
 	route.LINK_ID = link.LINK_ID;
 	route.TARGET_ID = 0;
 	siot_mesh_at_root_siot_mesh_at_root_init_route_update_data( &update, id_target, id_prev );
+	update.siot_m_link_table_update.push_back( link );
+	update.siot_m_route_table_update.push_back( route);
 	update.is_last = true; // within current collection
 	update.check_path_first = true;
+	ZEPTO_DEBUG_ASSERT( update.siot_m_link_table_update.size() || update.siot_m_route_table_update.size() );
 	update_list.push_back( update );
 
 	return SIOT_MESH_AT_ROOT_RET_OK;
@@ -316,6 +321,7 @@ uint8_t siot_mesh_at_root_add_or_merge_updates( SIOT_MESH_ROUTING_DATA_UPDATES& 
 		bool added = false;
 		for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
 		{
+			ZEPTO_DEBUG_ASSERT( it->siot_m_link_table_update.size() || it->siot_m_route_table_update.size() );
 			if ( update_list[i].device_id == it->device_id )
 			{
 				if ( ! it->in_progress ) // we can merge
@@ -352,51 +358,10 @@ uint8_t siot_mesh_at_root_add_updates_for_device( uint16_t id_target, uint16_t b
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
-uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
+uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR update )
 {
-	// TODO: here we assume that is_last is set correctly (and should be updated at time of item adding/removal). Think whether this assumption is practically good (seems to be, indeed...).
-	if ( mesh_routing_data_updates.begin() == mesh_routing_data_updates.end() )
-		return SIOT_MESH_AT_ROOT_RET_NO_UPDATES;
-	for ( update = mesh_routing_data_updates.begin(); update != mesh_routing_data_updates.end(); ++update )
-		if ( update->is_last && (!update->in_progress) )
-			return SIOT_MESH_AT_ROOT_RET_OK;
-	return SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES;
-}
+	ZEPTO_DEBUG_ASSERT( update->siot_m_link_table_update.size() || update->siot_m_route_table_update.size() );
 
-void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
-{
-	uint16_t i;
-	uint16_t header;
-	for ( i=0; i<update->siot_m_route_table_update.size(); i++ )
-	{
-		// | ADD-OR-MODIFY-ROUTE-ENTRY-AND-LINK-ID | TARGET-ID |
-		header = ADD_OR_MODIFY_LINK_ENTRY | ( update->siot_m_route_table_update[i].LINK_ID << 3 );
-		zepto_parser_encode_and_append_uint16( mem_h, header );
-		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_route_table_update[i].TARGET_ID );
-	}
-	for ( i=0; i<update->siot_m_link_table_update.size(); i++ )
-	{
-		// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
-		header = ADD_OR_MODIFY_LINK_ENTRY | ( update->siot_m_route_table_update[i].LINK_ID << 4 );
-		zepto_parser_encode_and_append_uint16( mem_h, header );
-		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].BUS_ID );
-		zepto_parser_encode_and_append_uint32( mem_h, update->siot_m_link_table_update[i].BUS_ID ); // intra-bus id
-	}
-}
-
-uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h )
-{
-	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR update;
-	uint8_t ret_code;
-	ret_code = siot_mesh_at_root_get_next_update( update );
-	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
-		return ret_code;
-	siot_mesh_at_root_update_to_packet( mem_h, update );
-	return SIOT_MESH_AT_ROOT_RET_OK;
-}
-
-uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
-{
 	SIOT_MESH_ROUTING_DATA_ITERATOR dev_data;
 	siot_mesh_at_root_get_device_data( update->device_id, dev_data );
 	ZEPTO_DEBUG_ASSERT( update->device_id == dev_data->device_id );
@@ -445,6 +410,74 @@ uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA
 		}
 	}
 
+	return SIOT_MESH_AT_ROOT_RET_OK;
+}
+
+uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR& update )
+{
+	// TODO: here we assume that is_last is set correctly (and should be updated at time of item adding/removal). Think whether this assumption is practically good (seems to be, indeed...).
+	if ( mesh_routing_data_updates.begin() == mesh_routing_data_updates.end() )
+		return SIOT_MESH_AT_ROOT_RET_NO_UPDATES;
+
+	bool start_over;
+	do
+	{
+		start_over = false;
+		for ( update = mesh_routing_data_updates.begin(); update != mesh_routing_data_updates.end(); ++update )
+			if ( update->is_last && (!update->in_progress) )
+			{
+				if ( update->device_id != 0 ) // not a ROOT
+				{
+					update->in_progress = true;
+					return SIOT_MESH_AT_ROOT_RET_OK;
+				}
+				else
+				{
+					siot_mesh_at_root_apply_update_to_local_copy( update );
+					mesh_routing_data_updates.erase( update );
+					start_over = true;
+					break;
+				}
+			}
+	}
+	while ( start_over );
+	return SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES;
+}
+
+void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR update )
+{
+	ZEPTO_DEBUG_ASSERT( update->siot_m_link_table_update.size() || update->siot_m_route_table_update.size() );
+	uint16_t i;
+	uint16_t header;
+	uint16_t more;
+	ZEPTO_DEBUG_ASSERT( update->in_progress );
+	for ( i=0; i<update->siot_m_route_table_update.size(); i++ )
+	{
+		// | ADD-OR-MODIFY-ROUTE-ENTRY-AND-LINK-ID | TARGET-ID |
+		more = ( i == update->siot_m_route_table_update.size() - 1 && update->siot_m_link_table_update.size() == 0 ) ? 0 : 1;
+		header = more | ( ADD_OR_MODIFY_ROUTE_ENTRY << 1 ) | ( update->siot_m_route_table_update[i].LINK_ID << 3 );
+		zepto_parser_encode_and_append_uint16( mem_h, header );
+		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_route_table_update[i].TARGET_ID );
+	}
+	for ( i=0; i<update->siot_m_link_table_update.size(); i++ )
+	{
+		more = ( i == update->siot_m_link_table_update.size() - 1 ) ? 0 : 1;
+		// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
+		header = more | ( ADD_OR_MODIFY_LINK_ENTRY << 1 ) | ( update->siot_m_route_table_update[i].LINK_ID << 4 );
+		zepto_parser_encode_and_append_uint16( mem_h, header );
+		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].BUS_ID );
+		zepto_parser_encode_and_append_uint32( mem_h, 0 ); // intra-bus id
+	}
+}
+
+uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h )
+{
+	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR update;
+	uint8_t ret_code;
+	ret_code = siot_mesh_at_root_get_next_update( update );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
+		return ret_code;
+	siot_mesh_at_root_update_to_packet( mem_h, update );
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 

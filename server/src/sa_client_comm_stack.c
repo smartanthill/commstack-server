@@ -123,6 +123,7 @@ wait_for_comm_event:
 			{
 				// quite dirty and temporary solution
 				zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+		ZEPTO_DEBUG_PRINTF_1( "         ############  about to jump to sagdp with route update reply  ###########\n" );
 				goto sagdpsend;
 				break;
 			}
@@ -376,6 +377,34 @@ wait_for_comm_event:
 				// unexpected ret_code
 				ZEPTO_DEBUG_PRINTF_2( "Unexpected ret_code %d\n", ret_code );
 				ZEPTO_DEBUG_ASSERT( 0 );
+				break;
+			}
+		}
+
+
+
+		// we add a quick jump here to intercept packets for Mesh Protocol itself
+		// TODO: full CCP processing must be done here
+		{
+			parser_obj po, po1;
+			zepto_parser_init( &po, MEMORY_HANDLE_MAIN_LOOP_1 );
+
+			uint8_t first_byte = zepto_parse_uint8( &po );
+			uint16_t packet_head = zepto_parse_encoded_uint16( &po );
+			uint8_t packet_type = packet_head & 0x7; // TODO: use bit field processing instead
+
+			if ( packet_type == 0x5 /*SACCP_PHY_AND_ROUTING_DATA*/ )
+			{
+				uint8_t additional_bits = (packet_head >> 3) & 0x7; // "additional bits" passed alongside with PHY-AND-ROUTING-DATA-REQUEST-BODY
+				ZEPTO_DEBUG_ASSERT( additional_bits == 0 ); // Route-Update-Request is always accompanied with SACCP "additional bits" equal to 0x0; bits [6..7] reserved (MUST be zeros)
+				zepto_parser_init_by_parser( &po1, &po );
+				zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+				zepto_convert_part_of_request_to_response( MEMORY_HANDLE_MAIN_LOOP_1, &po, &po1 );
+				zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+				uint16_t source_dev_id = 1; // TODO: here we know in context of which device we actually work; use actual data!!! 
+		ZEPTO_DEBUG_PRINTF_1( "         ############  route update reply received  ###########\n" );
+				handler_siot_process_route_update_response( source_dev_id, MEMORY_HANDLE_MAIN_LOOP_1 );
+				goto wait_for_comm_event;
 				break;
 			}
 		}

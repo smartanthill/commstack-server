@@ -128,6 +128,8 @@ void siot_mesh_init_tables()  // TODO: this call reflects current development st
 	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA data;
 	data.device_id = 0;
 	mesh_routing_data.push_back( data );
+	data.device_id = 1;
+	mesh_routing_data.push_back( data );
 }
 
 ///////////////////   Basic calls: device list  //////////////////////
@@ -307,9 +309,9 @@ uint8_t siot_mesh_at_root_add_or_merge_updates( SIOT_MESH_ROUTING_DATA_UPDATES& 
 {
 	// we start from the end of the list and add updates one by one;
 	// if an update to the same device is already in the set of updates and is not in progress, we merge updates
-	uint16_t i;
+	int16_t i;
 	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it;
-	for ( i=update_list.size(); i; i-- )
+	for ( i=update_list.size()-1; i>=0; i-- )
 	{
 		bool added = false;
 		for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
@@ -586,7 +588,7 @@ void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_a
 		{
 			// we assume that device returns the same info no matter which way it arrives
 			bool found2 = false;
-			for ( j=0; j<last_hops_of_all_devices[i].last_hops_in.size(); j++ )
+			for ( j=0; j<last_hops_of_all_devices[i].last_hops_out.size(); j++ )
 				if ( last_hops_of_all_devices[i].last_hops_out[j].last_hop_id == hop.last_hop_id && last_hops_of_all_devices[i].last_hops_out[j].last_hop_bus_id == hop.last_hop_bus_id )
 				{
 					ZEPTO_DEBUG_ASSERT( last_hops_of_all_devices[i].last_hops_out[j].conn_quality == hop.conn_quality );

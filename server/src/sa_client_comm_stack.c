@@ -76,6 +76,7 @@ int main_loop()
 	sasp_init_at_lifestart( &sasp_data );*/
 	sasp_restore_from_backup();
 	sagdp_init();
+	siot_mesh_init_tables();
 
 	// Try to initialize connection
 	if ( !communication_initialize() )
@@ -545,7 +546,7 @@ saoudp_send:
 
 		// send packet
 hal_send:
-		ZEPTO_DEBUG_ASSERT( link_id == 0 ); // TODO: link_id must be a part of send_packet() call; we are now just in the middle of development...
+//		ZEPTO_DEBUG_ASSERT( link_id == 0 ); // TODO: link_id must be a part of send_packet() call; we are now just in the middle of development...
 		ret_code = send_message( MEMORY_HANDLE_MAIN_LOOP_1 );
 		zepto_parser_free_memory( MEMORY_HANDLE_MAIN_LOOP_1 );
 		if (ret_code != COMMLAYER_RET_OK )

@@ -38,7 +38,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #undef fprintf
 #endif
 
-#include <xkeycheck.h>
+//#include <xkeycheck.h>
 #include <simpleiot/siot_m_protocol.h>
 #include <vector>
 #include <list>
@@ -86,6 +86,7 @@ SIOT_MESH_ALL_ROUTING_DATA_UPDATES mesh_routing_data_updates;
 
 void dbg_siot_mesh_at_root_validate_device_tables( SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* data )
 {
+#ifdef SA_DEBUG
 	uint16_t i, j;
 
 	// target IDs in the route table are in increasing order
@@ -111,6 +112,7 @@ void dbg_siot_mesh_at_root_validate_device_tables( SIOT_MESH_DEVICE_ROUTE_AND_LI
 		if ( ! found )
 			ZEPTO_DEBUG_ASSERT( 0 == "LINK_ID in the route table corresponds to nothing in the link table" );
 	}
+#endif
 }
 
 void dbg_siot_mesh_at_root_validate_all_device_tables()

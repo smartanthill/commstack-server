@@ -93,6 +93,7 @@ int main_loop()
 	zepto_write_uint8( MEMORY_HANDLE_MAIN_LOOP_2_SAOUDP_ADDR, 0 );
 	zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_2_SAOUDP_ADDR );
 
+	uint16_t src_id;
 
 	// MAIN LOOP
 	for (;;)
@@ -221,7 +222,7 @@ wait_for_comm_event:
 		// 2.0. Pass to siot/mesh
 	siotmp_rec:
 #if SIOT_MESH_IMPLEMENTATION_WORKS
-		ret_code = handler_siot_mesh_receive_packet( MEMORY_HANDLE_MAIN_LOOP_1, 0 ); // TODO: add actual connection quality
+		ret_code = handler_siot_mesh_receive_packet( MEMORY_HANDLE_MAIN_LOOP_1, &src_id, 0 ); // TODO: add actual connection quality
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 
 		switch ( ret_code )

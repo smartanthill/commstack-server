@@ -334,9 +334,9 @@ uint8_t siot_mesh_at_root_add_or_merge_updates( SIOT_MESH_ROUTING_DATA_UPDATES& 
 					// is_last flag remains unchanged
 					mesh_routing_data_updates.push_back( update_list[i] );
 				}
+				added = true;
+				break;
 			}
-			added = true;
-			break;
 		}
 		if ( !added )
 		{

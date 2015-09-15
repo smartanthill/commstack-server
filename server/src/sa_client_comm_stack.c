@@ -137,6 +137,7 @@ wait_for_comm_event:
 		// [[QUICK CHECK FOR UNITS POTENTIALLY WAITING FOR TIMEOUT end]]
 
 		ret_code = wait_for_communication_event( &wait_for );
+		SA_TIME_SET_INFINITE_TIME( wait_for.wait_time );
 //		ZEPTO_DEBUG_PRINTF_4( "=============================================Msg wait event; ret = %d, rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
 
 		switch ( ret_code )
@@ -570,7 +571,8 @@ saoudp_send:
 
 #if SIOT_MESH_IMPLEMENTATION_WORKS
 		uint16_t link_id;
-		ret_code = handler_siot_mesh_send_packet( MEMORY_HANDLE_MAIN_LOOP_1, 1, &link_id ); // currently we know only about a single client with id=1
+		uint16_t target_id = 1;
+		ret_code = handler_siot_mesh_send_packet( target_id, MEMORY_HANDLE_MAIN_LOOP_1, &link_id ); // currently we know only about a single client with id=1
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 
 		switch ( ret_code )

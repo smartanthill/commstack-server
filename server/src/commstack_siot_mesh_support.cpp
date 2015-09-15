@@ -533,8 +533,6 @@ uint8_t siot_mesh_at_root_update_done( uint16_t device_id )
 uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id )
 {
 	uint16_t i, j;
-	if ( mesh_routing_data.size() == 0 )
-		return SIOT_MESH_RET_ERROR_NOT_FOUND; 
 
 	for ( i=0; i<mesh_routing_data.size(); i++)
 		if ( mesh_routing_data[i].device_id == 0 )
@@ -542,6 +540,20 @@ uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_
 				if ( mesh_routing_data[i].siot_m_route_table[j].TARGET_ID == target_id )
 				{
 					*link_id = mesh_routing_data[i].siot_m_route_table[j].LINK_ID;
+					return SIOT_MESH_RET_OK;
+				}
+	return SIOT_MESH_RET_ERROR_NOT_FOUND;
+}
+
+uint8_t siot_mesh_get_link( uint16_t device_id, uint16_t link_id, SIOT_MESH_LINK* link )
+{
+	uint16_t i, j;
+	for ( i=0; i<mesh_routing_data.size(); i++)
+		if ( mesh_routing_data[i].device_id == 0 )
+			for ( j=0; j<mesh_routing_data[i].siot_m_link_table.size(); j++ )
+				if ( mesh_routing_data[i].siot_m_link_table[j].LINK_ID == link_id )
+				{
+					ZEPTO_MEMCPY( link, &(mesh_routing_data[i].siot_m_link_table[j]), sizeof(SIOT_MESH_LINK) );
 					return SIOT_MESH_RET_OK;
 				}
 	return SIOT_MESH_RET_ERROR_NOT_FOUND;

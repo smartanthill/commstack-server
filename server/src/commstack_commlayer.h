@@ -53,9 +53,9 @@ uint8_t hal_get_packet_bytes( MEMORY_HANDLE mem_h );
 
 uint8_t wait_for_communication_event( waiting_for* wf );
 uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h );
-uint8_t send_to_central_unit( MEMORY_HANDLE mem_h );
+uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
 
-uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h );
+uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
 
 #ifdef __cplusplus
 }

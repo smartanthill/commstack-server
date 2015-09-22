@@ -45,6 +45,18 @@ typedef struct _DEVICE_CONTEXT
 
 DEVICE_CONTEXT devices[ MAX_INSTANCES_SUPPORTED ];
 
+void FAKE_INITIALIZE_DEVICES() // NOTE: here we do a quick jump ove pairing (or alike), and loading respective values from a DB; eventualy this code will be completely replaced by a valid one.
+{
+	uint16_t i, j;
+	uint8_t base_key[16] = { 	0x00, 0x01,	0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, };
+	for ( i=0; i<MAX_INSTANCES_SUPPORTED; i++ )
+	{
+		devices[i].device_id = i + 1;
+		for ( j=0; j<16; j++ )
+			devices[i].AES_ENCRYPTION_KEY[j] = base_key[j] + ( (i+1) << 4 );
+	}
+}
+
 
 int main_loop()
 {
@@ -108,6 +120,9 @@ wait_for_comm_event:
 
 		sa_get_time( &currt );
 
+//		for ( dev_in_use=0; dev_in_use<MAX_INSTANCES_SUPPORTED; dev_in_use++ )
+		dev_in_use = 0;
+		{
 			// 1.1. test GDP-ctr
 			ret_code = handler_sagdp_timer( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR, MEMORY_HANDLE_SAGDP_LSM_CTR, MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_ctr) + dev_in_use );
 			if ( ret_code == SAGDP_RET_NEED_NONCE )
@@ -135,6 +150,7 @@ wait_for_comm_event:
 				zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR );
 				goto saspsend;
 			}
+		}
 
 		// 2. MESH
 		ret_code = handler_siot_mesh_timer( &currt, &wait_for, MEMORY_HANDLE_MAIN_LOOP_1 );
@@ -214,6 +230,17 @@ wait_for_comm_event:
 				if ( ret_code == COMMLAYER_RET_OK_AS_CU )
 				{
 					zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_CU\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
+					parser_obj po, po1;
+					zepto_parser_init( &po, MEMORY_HANDLE_MAIN_LOOP_1 );
+					dev_in_use = zepto_parse_encoded_uint16( &po );
+					ZEPTO_DEBUG_ASSERT( dev_in_use > 0 );
+					dev_in_use --;
+					zepto_parser_init_by_parser( &po1, &po );
+					zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+					zepto_convert_part_of_request_to_response( MEMORY_HANDLE_MAIN_LOOP_1, &po, &po1 );
+
+					zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
 					goto client_received;
 					break;
 				}
@@ -221,6 +248,7 @@ wait_for_comm_event:
 				{
 					// regular processing will be done below in the next block
 					zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_SLAVE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
 					goto siotmp_rec;
 					break;
 				}
@@ -280,7 +308,10 @@ wait_for_comm_event:
 	siotmp_rec:
 #if SIOT_MESH_IMPLEMENTATION_WORKS
 		ret_code = handler_siot_mesh_receive_packet( MEMORY_HANDLE_MAIN_LOOP_1, &dev_in_use, 0 ); // TODO: add actual connection quality
+		ZEPTO_DEBUG_ASSERT( dev_in_use > 0 );
+		dev_in_use--;
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
+		ZEPTO_DEBUG_PRINTF_6( "handler_siot_mesh_receive_packet(): ret: %d; rq_size: %d, rsp_size: %d, dev_in_use = %d, device_id = %d\n", ret_code, ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ), dev_in_use, devices[dev_in_use].device_id );
 
 		switch ( ret_code )
 		{
@@ -333,7 +364,7 @@ wait_for_comm_event:
 		// 2.2. Pass to SASP
 		ret_code = handler_sasp_receive( devices[dev_in_use].AES_ENCRYPTION_KEY, pid, MEMORY_HANDLE_MAIN_LOOP_1, &(devices[dev_in_use].sasp_data), devices[dev_in_use].device_id );
 		zepto_response_to_request( MEMORY_HANDLE_MAIN_LOOP_1 );
-		ZEPTO_DEBUG_PRINTF_4( "SASP1:  ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
+		ZEPTO_DEBUG_PRINTF_6( "handler_sasp_receive(): ret: %d; rq_size: %d, rsp_size: %d, dev_in_use = %d, device_id = %d\n", ret_code, ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ), dev_in_use, devices[dev_in_use].device_id );
 
 		switch ( ret_code )
 		{
@@ -508,7 +539,7 @@ wait_for_comm_event:
 			}
 			case SAGDP_RET_SYS_CORRUPTED:
 			{
-				send_error_to_central_unit( MEMORY_HANDLE_MAIN_LOOP_1 );
+				send_error_to_central_unit( MEMORY_HANDLE_MAIN_LOOP_1, devices[dev_in_use].device_id ); // TODO: what's about errors of Comm.Stack itself?
 				sagdp_init( &(devices[dev_in_use].sagdp_context_app) );
 				ZEPTO_DEBUG_PRINTF_1( "Internal error. System is to be reinitialized\n" );
 				goto wait_for_comm_event;
@@ -579,7 +610,7 @@ wait_for_comm_event:
 		// Note: we may need to add some data (such as chain ID) or to somehow restructure the packet data;
 		//       in this case this is a right place to do that
 
-		ret_code = send_to_central_unit( MEMORY_HANDLE_MAIN_LOOP_1 );
+		ret_code = send_to_central_unit( MEMORY_HANDLE_MAIN_LOOP_1, devices[dev_in_use].device_id );
 		// TODO: check ret_code
 		goto wait_for_comm_event;
 
@@ -590,6 +621,7 @@ wait_for_comm_event:
 
 
 
+		ZEPTO_DEBUG_PRINTF_1( "<NOT jumping to client_received (consequtive flow)>\n" );
 client_received:
 #if 0 // this functionality is trivial and will be done on a Central Unit side
 		// 4. SACCP (prepare packet)
@@ -601,7 +633,7 @@ client_received:
 #endif
 
 		// 5. SAGDP
-		ZEPTO_DEBUG_PRINTF_3( "@client_received: rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ) );
+		ZEPTO_DEBUG_PRINTF_5( "@client_received: rq_size: %d, rsp_size: %d, dev_in_use: %d, for-device: %d\n", ugly_hook_get_request_size( MEMORY_HANDLE_MAIN_LOOP_1 ), ugly_hook_get_response_size( MEMORY_HANDLE_MAIN_LOOP_1 ), dev_in_use, devices[dev_in_use].device_id );
 		sa_get_time( &currt );
 //		gdp_context = SAGDP_CONTEXT_APPLICATION; // TODO: context selection based on caller
 		ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, MEMORY_HANDLE_MAIN_LOOP_1, MEMORY_HANDLE_MAIN_LOOP_1_SAOUDP_ADDR, MEMORY_HANDLE_SAGDP_LSM_APP, MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_app) );
@@ -620,7 +652,7 @@ client_received:
 		{
 			case SAGDP_RET_SYS_CORRUPTED:
 			{
-				send_error_to_central_unit( MEMORY_HANDLE_MAIN_LOOP_1 );
+				send_error_to_central_unit( MEMORY_HANDLE_MAIN_LOOP_1, devices[dev_in_use].device_id ); // TODO: what's about errors of Comm.Stack itself?
 				sagdp_init( &(devices[dev_in_use].sagdp_context_app) );
 				ZEPTO_DEBUG_PRINTF_1( "Internal error. System is to be reinitialized\n" );
 				goto wait_for_comm_event;
@@ -754,6 +786,8 @@ char* get_persistent_storage_path_from_command_line(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+	FAKE_INITIALIZE_DEVICES();
+
 	setbuf(stdout, NULL);
 
 	set_port_from_command_line( argc, argv );

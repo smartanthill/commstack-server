@@ -287,7 +287,18 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h )
 	if ( packet_src == 38 )
 		return COMMLAYER_RET_OK_AS_CU;
 	if ( packet_src == 40 )
+	{
+#ifdef SA_DEBUG
+	uint16_t i;
+	uint16_t sz = memory_object_get_response_size( mem_h );
+	uint8_t* rsp = memory_object_get_response_ptr( mem_h );
+	ZEPTO_DEBUG_PRINTF_1( "PACKET RECEIVED FROM DEVICE: " );
+	for ( i=0; i<sz; i++ )
+		ZEPTO_DEBUG_PRINTF_2( "%02x ", rsp[i] );
+	ZEPTO_DEBUG_PRINTF_1( "\n" );
+#endif
 		return COMMLAYER_RET_OK_AS_SLAVE;
+	}
 	return ret;
 }
 
@@ -381,16 +392,41 @@ uint8_t wait_for_communication_event( waiting_for* wf )
 
 uint8_t send_message( MEMORY_HANDLE mem_h )
 {
+#ifdef SA_DEBUG
+	uint16_t i;
+	uint16_t sz = memory_object_get_request_size( mem_h );
+	uint8_t* rq = memory_object_get_request_ptr( mem_h );
+	ZEPTO_DEBUG_PRINTF_1( "PACKET BEING SENT TO DEVICE: " );
+	for ( i=0; i<sz; i++ )
+		ZEPTO_DEBUG_PRINTF_2( "%02x ", rq[i] );
+	ZEPTO_DEBUG_PRINTF_1( "\n" );
+#endif
 	return send_within_master( mem_h, 35 );
 }
 
-uint8_t send_to_central_unit( MEMORY_HANDLE mem_h )
+uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
+	parser_obj po, po1;
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	uint16_t sz = zepto_parsing_remaining_bytes( &po );
+	zepto_parse_skip_block( &po1, sz );
+	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
+	zepto_parser_encode_and_prepend_uint16( mem_h, src_id );
+	zepto_response_to_request( mem_h );
 	return send_within_master( mem_h, 37 );
 }
 
-uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h )
+uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
+	parser_obj po, po1;
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	uint16_t sz = zepto_parsing_remaining_bytes( &po );
+	zepto_parse_skip_block( &po1, sz );
+	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
+	zepto_parser_encode_and_prepend_uint16( mem_h, src_id );
+	zepto_response_to_request( mem_h );
 	return send_within_master( mem_h, 47 );
 }
 

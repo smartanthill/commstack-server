@@ -208,7 +208,8 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices( SIOT_MESH_ROUTING_DATA_UP
 #endif // SA_DEBUG
 		siot_mesh_at_root_siot_mesh_at_root_init_route_update_data( &update, dev_id, prev_dev_id );
 		siot_mesh_at_root_get_device_data( dev_id, rd_it );
-		for ( i=0; i<rd_it->siot_m_route_table.size(); i++ )
+		int ini_sz = rd_it->siot_m_route_table.size();
+		for ( i=0; i<ini_sz; i++ )
 			if ( rd_it->siot_m_route_table[i].TARGET_ID == id_prev )
 			{
 				route.LINK_ID = rd_it->siot_m_route_table[i].LINK_ID;
@@ -373,7 +374,8 @@ uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA
 	for ( i=0; i<update->siot_m_route_table_update.size(); i++ )
 	{
 		bool applied = false;
-		for ( j=0; j<dev_data->siot_m_route_table.size(); j++ )
+		int ini_sz = dev_data->siot_m_route_table.size();
+		for ( j=0; j<ini_sz; j++ )
 			if ( dev_data->siot_m_route_table[j].TARGET_ID == update->siot_m_route_table_update[i].TARGET_ID )
 			{
 				dev_data->siot_m_route_table[j].LINK_ID = update->siot_m_route_table_update[i].LINK_ID;
@@ -383,6 +385,8 @@ uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA
 			else if ( dev_data->siot_m_route_table[j].TARGET_ID < update->siot_m_route_table_update[i].TARGET_ID ) // as soon as.... (we exploit canonicity here)
 			{
 				dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin() + j, update->siot_m_route_table_update[i] );
+				applied = true;
+				break;
 			}
 		if ( !applied ) // something new
 		{
@@ -394,7 +398,8 @@ uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA
 	for ( i=0; i<update->siot_m_link_table_update.size(); i++ )
 	{
 		bool applied = false;
-		for ( j=0; j<dev_data->siot_m_link_table.size(); j++ )
+		int ini_sz = dev_data->siot_m_link_table.size();
+		for ( j=0; j<ini_sz; j++ )
 			if ( dev_data->siot_m_link_table[j].LINK_ID == update->siot_m_link_table_update[i].LINK_ID )
 			{
 				dev_data->siot_m_link_table[j].LINK_ID = update->siot_m_link_table_update[i].LINK_ID;
@@ -404,6 +409,8 @@ uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA
 			else if ( dev_data->siot_m_link_table[j].LINK_ID < update->siot_m_link_table_update[i].LINK_ID ) // as soon as.... (we exploit canonicity here)
 			{
 				dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin() + j, update->siot_m_link_table_update[i] );
+				applied = true;
+				break;
 			}
 		if ( !applied ) // something new
 		{
@@ -472,7 +479,7 @@ void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUT
 	}
 }
 
-uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h )
+uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h, uint16_t* recipient )
 {
 	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR update;
 	uint8_t ret_code;
@@ -480,6 +487,8 @@ uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h )
 	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
 		return ret_code;
 	siot_mesh_at_root_update_to_packet( mem_h, update );
+	*recipient = update->device_id;
+	ZEPTO_DEBUG_ASSERT( *recipient > 0 );
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
@@ -593,7 +602,8 @@ void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_
 	uint16_t i, j;
 
 	bool found = false;
-	for ( i=0; i<last_hops_of_all_devices.size(); i++ )
+	int ini_sz = last_hops_of_all_devices.size();
+	for ( i=0; i<ini_sz; i++ )
 		if ( last_hops_of_all_devices[i].device_id == src_id )
 		{
 			// we assume that device returns the same info no matter which way it arrives
@@ -630,7 +640,8 @@ void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_a
 	uint16_t i, j;
 
 	bool found = false;
-	for ( i=0; i<last_hops_of_all_devices.size(); i++ )
+	int ini_sz = last_hops_of_all_devices.size();
+	for ( i=0; i<ini_sz; i++ )
 		if ( last_hops_of_all_devices[i].device_id == src_id )
 		{
 			// we assume that device returns the same info no matter which way it arrives
@@ -661,7 +672,7 @@ void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_a
 #define SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
 #define SIOT_MESH_IS_QUALITY_OF_FIRST_INOUT_CONNECTION_BETTER( in1, out1, in2, out2 ) ( (in1<in2)||((in1==in2)&&(out1<out2)) ) /*TODO: this is a quick solution; think about better ones*/
 
-uint8_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
+uint8_t siot_mesh_at_root_find_best_route_to_device( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
 {
 	uint16_t i, j, k;
 	uint16_t last_in, last_out;
@@ -695,6 +706,14 @@ uint8_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id_
 	// TODO: consider more relaxed matches...
 
 	return SIOT_MESH_AT_ROOT_RET_FAILED;
+}
+
+uint8_t siot_mesh_at_root_find_best_route( uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
+{
+	if ( last_hops_of_all_devices.size() == 0 )
+		return SIOT_MESH_AT_ROOT_RET_FAILED;
+	*target_id = last_hops_of_all_devices[0].device_id; // TODO: we may want to try all possibilities, not just the first one
+	return siot_mesh_at_root_find_best_route_to_device( *target_id, bus_id_at_target, id_prev, bus_id_at_prev, id_next );
 }
 
 uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id )

@@ -447,6 +447,7 @@ wait_for_comm_event:
 		// 3. pass to SAGDP a new packet
 		sa_get_time( &currt );
 		bool for_ctr = handler_sagdp_is_up_packet_ctr( MEMORY_HANDLE_MAIN_LOOP_1 );
+		ZEPTO_DEBUG_PRINTF_4( "Packet understood as for %s from device %d (internal: %d)\n", for_ctr ? "CONTROL" : "APP", devices[dev_in_use].device_id, dev_in_use );
 
 		if ( for_ctr )
 		{

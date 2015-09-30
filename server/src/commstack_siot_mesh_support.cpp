@@ -504,7 +504,7 @@ uint8_t siot_mesh_at_root_update_done( uint16_t device_id )
 #ifdef SA_DEBUG
 			uint16_t cnt = 0;
 			for ( it1 = mesh_routing_data_updates.begin(); it1 != mesh_routing_data_updates.end(); ++it1 )
-				if ( it->device_id == it1->device_id )
+				if ( it->device_id == it1->device_id && it1->in_progress )
 					cnt++;
 			ZEPTO_DEBUG_ASSERT( cnt == 1 ); // only a single update to the same device can be in progress
 #endif // SA_DEBUG

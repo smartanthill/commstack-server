@@ -335,6 +335,7 @@ uint8_t siot_mesh_at_root_add_or_merge_updates( SIOT_MESH_ROUTING_DATA_UPDATES& 
 				else
 				{
 					// is_last flag remains unchanged
+					ZEPTO_DEBUG_ASSERT( update_list[i].in_progress == false );
 					mesh_routing_data_updates.push_back( update_list[i] );
 				}
 				added = true;
@@ -344,6 +345,7 @@ uint8_t siot_mesh_at_root_add_or_merge_updates( SIOT_MESH_ROUTING_DATA_UPDATES& 
 		if ( !added )
 		{
 			// is_last flag remains unchanged
+			ZEPTO_DEBUG_ASSERT( update_list[i].in_progress == false );
 			mesh_routing_data_updates.push_back( update_list[i] );
 		}
 	}
@@ -428,28 +430,42 @@ uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_IT
 	if ( mesh_routing_data_updates.begin() == mesh_routing_data_updates.end() )
 		return SIOT_MESH_AT_ROOT_RET_NO_UPDATES;
 
-	bool start_over;
-	do
+	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it;
+
+	bool start_big_loop_over;
+	bool continue_inner_loop;
+	do // note: we have to repeat the body of this cycle, if we remove anything from mesh_routing_data_updates (see code below)
 	{
-		start_over = false;
+		start_big_loop_over = false;
 		for ( update = mesh_routing_data_updates.begin(); update != mesh_routing_data_updates.end(); ++update )
-			if ( update->is_last && (!update->in_progress) )
+			if ( update->is_last && (!update->in_progress) ) // potential candidate
 			{
 				if ( update->device_id != 0 ) // not a ROOT
 				{
+					continue_inner_loop = false;
+					for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
+						if ( it->device_id == update->device_id && it->in_progress ) // already in progress; subsequent update must wait until done
+						{
+							continue_inner_loop = true; // find a new candidate
+							break;
+						}
+
+					if ( continue_inner_loop )
+						continue;
+
 					update->in_progress = true;
 					return SIOT_MESH_AT_ROOT_RET_OK;
 				}
-				else
+				else // a non-Root candidate is found; it is not guaranteed that no updates to the same device is in progress; need to check it first
 				{
 					siot_mesh_at_root_apply_update_to_local_copy( update );
 					mesh_routing_data_updates.erase( update );
-					start_over = true;
+					start_big_loop_over = true; // after erasing we're not guaranteed that iterator survives (especially, if we switch to vector>; it's safer to start over
 					break;
 				}
 			}
 	}
-	while ( start_over );
+	while ( start_big_loop_over );
 	return SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES;
 }
 

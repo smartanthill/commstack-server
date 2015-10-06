@@ -104,15 +104,15 @@ typedef struct _eeprom_slot_descriptor
 	uint16_t data_size;
 } eeprom_slot_descriptor;
 
-const eeprom_slot_descriptor eeprom_slots[] ZEPTO_PROG_CONSTANT_LOCATION =
+#define ITEM_MAX_SUPPORTED 32
+
+const eeprom_slot_descriptor eeprom_slots[ ITEM_MAX_SUPPORTED ] ZEPTO_PROG_CONSTANT_LOCATION =
 {
 	{DATA_REINCARNATION_ID_SIZE * 2, DATA_SASP_NONCE_LW_SIZE},
 	{DATA_REINCARNATION_ID_SIZE * 2 + SLOT_SIZE_FROM_DATA_SIZE( DATA_SASP_NONCE_LW_SIZE ), DATA_SASP_NONCE_LS_SIZE },
 };
 
 #define ITEM_OFFSET( item ) ( DATA_REINCARNATION_ID_SIZE * 2 + (item) * ( SLOT_SIZE_FROM_DATA_SIZE( DATA_SASP_NONCE_LW_SIZE ) + SLOT_SIZE_FROM_DATA_SIZE( DATA_SASP_NONCE_LS_SIZE ) ) )
-
-#define ITEM_MAX_SUPPORTED 5
 
 
 
@@ -282,4 +282,72 @@ void eeprom_read( uint8_t id, uint8_t* data, uint16_t item)
 		return;
 
 	ZEPTO_DEBUG_ASSERT( 0 == "eeprom slot is corrupted" );
+}
+
+uint16_t eeprom_serialize( uint8_t* buff )
+{
+	uint8_t* buff_start = buff;
+	if ( buff != NULL )
+	{
+		// reincarnation data
+		buff[0] = DATA_REINCARNATION_ID_SIZE;
+		buff++;
+		hal_eeprom_read( buff, DATA_REINCARNATION_ID_SIZE, 0 );
+		buff += DATA_REINCARNATION_ID_SIZE;
+
+		// repeat for each item
+		uint16_t i;
+		for ( i=0; i<ITEM_MAX_SUPPORTED; i++ )
+		{
+			// EEPROM_SLOT_DATA_SASP_NONCE_LW_ID
+			buff[0] = EEPROM_SLOT_DATA_SASP_NONCE_LW_ID;
+			buff[1] = DATA_SASP_NONCE_LW_SIZE;
+			buff += 2;
+			eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, buff, i);
+			buff += DATA_SASP_NONCE_LW_SIZE;
+			// EEPROM_SLOT_DATA_SASP_NONCE_LS_ID
+			buff[0] = EEPROM_SLOT_DATA_SASP_NONCE_LS_ID;
+			buff[1] = DATA_SASP_NONCE_LS_SIZE;
+			buff += 2;
+			eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, buff, i);
+			buff += DATA_SASP_NONCE_LS_SIZE;
+		}
+
+		return buff - buff_start;
+	}
+	else
+	{
+		return DATA_REINCARNATION_ID_SIZE + 1 + ITEM_MAX_SUPPORTED * ( 2 + DATA_SASP_NONCE_LW_SIZE + 2 + DATA_SASP_NONCE_LS_SIZE );
+	}
+
+}
+
+void eeprom_deserialize( uint8_t* buff, uint16_t sz )
+{
+	// TODO: soon or later we will have to switch to dynamical model... this is a quite temporary solution
+	uint8_t* end = buff + sz;
+	ZEPTO_DEBUG_ASSERT( buff[0] == DATA_REINCARNATION_ID_SIZE );
+	buff++;
+	hal_eeprom_write( buff, DATA_REINCARNATION_ID_SIZE, 0 );
+	buff += DATA_REINCARNATION_ID_SIZE;
+
+	// repeat for each item
+	uint16_t i;
+	for ( i=0; i<ITEM_MAX_SUPPORTED; i++ )
+	{
+		ZEPTO_DEBUG_ASSERT( buff < end );
+		// EEPROM_SLOT_DATA_SASP_NONCE_LW_ID
+		ZEPTO_DEBUG_ASSERT( buff[0] == EEPROM_SLOT_DATA_SASP_NONCE_LW_ID );
+		ZEPTO_DEBUG_ASSERT( buff[1] == DATA_SASP_NONCE_LW_SIZE );
+		buff += 2;
+		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, buff, i);
+		buff += DATA_SASP_NONCE_LW_SIZE;
+		// EEPROM_SLOT_DATA_SASP_NONCE_LS_ID
+		ZEPTO_DEBUG_ASSERT( buff[0] == EEPROM_SLOT_DATA_SASP_NONCE_LS_ID );
+		ZEPTO_DEBUG_ASSERT( buff[1] == DATA_SASP_NONCE_LS_SIZE );
+		buff += 2;
+		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, buff, i);
+		buff += DATA_SASP_NONCE_LS_SIZE;
+	}
+	ZEPTO_DEBUG_ASSERT( buff == end );
 }

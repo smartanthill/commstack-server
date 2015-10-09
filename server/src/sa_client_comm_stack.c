@@ -325,7 +325,7 @@ wait_for_comm_event:
 		// 2.0. Pass to siot/mesh
 	siotmp_rec:
 #if SIOT_MESH_IMPLEMENTATION_WORKS
-		ret_code = handler_siot_mesh_receive_packet(  working_handle.packet_h, &dev_in_use, 0 ); // TODO: add actual connection quality
+		ret_code = handler_siot_mesh_receive_packet(  working_handle.packet_h, MEMORY_HANDLE_MESH_ACK, &dev_in_use, 0, 0 ); // TODO: add actual connection quality
 		dev_in_use--;
 		ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
 		zepto_response_to_request(  working_handle.packet_h );
@@ -333,6 +333,14 @@ wait_for_comm_event:
 
 		switch ( ret_code )
 		{
+			case SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS:
+			{
+				zepto_response_to_request( MEMORY_HANDLE_MESH_ACK );
+				HAL_SEND_PACKET_TO_DEVICE( MEMORY_HANDLE_MESH_ACK );
+				zepto_parser_free_memory( MEMORY_HANDLE_MESH_ACK );
+				// regular processing will be done below in the next block
+				break;
+			}
 			case SIOT_MESH_RET_PASS_TO_PROCESS:
 			{
 				// regular processing will be done below in the next block
@@ -740,7 +748,7 @@ saoudp_send:
 
 #if SIOT_MESH_IMPLEMENTATION_WORKS
 		uint16_t link_id;
-		ret_code = handler_siot_mesh_send_packet( devices[dev_in_use].device_id,  working_handle.packet_h, working_handle.resend_cnt, &link_id ); // currently we know only about a single client with id=1
+		ret_code = handler_siot_mesh_send_packet( &currt, &wait_for, devices[dev_in_use].device_id,  working_handle.packet_h, working_handle.resend_cnt, &link_id ); // currently we know only about a single client with id=1
 		zepto_response_to_request(  working_handle.packet_h );
 
 		switch ( ret_code )

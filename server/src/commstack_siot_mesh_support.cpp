@@ -744,3 +744,73 @@ uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id )
 
 	return SIOT_MESH_AT_ROOT_RET_FAILED;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+// pending mesh-level resends
+
+// TODO (URGENT): we need here either dynamical memory handle ackuiring mechanism, or alike
+
+typedef struct _MESH_PENDING_RESENDS
+{
+//	MEMORY_HANDLE packet_h;
+	uint8_t* packet_data;
+	uint16_t packet_sz;
+	uint8_t resend_cnt;
+	sa_time_val next_resend_time;
+	uint16_t checksum;
+	uint16_t target_id;
+} MESH_PENDING_RESENDS;
+
+typedef vector< MESH_PENDING_RESENDS > PENDING_RESENDS;
+typedef vector< MESH_PENDING_RESENDS >::iterator PENDING_RESENDS_ITERATOR;
+PENDING_RESENDS pending_resends;
+
+void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, sa_time_val* time_to_next_event )
+{
+	// 1. add resend task
+	MESH_PENDING_RESENDS resend;
+	resend.target_id = target_id;
+	resend.packet_sz = memory_object_get_request_size( packet );
+	resend.packet_data = new uint8_t [resend.packet_sz];
+	parser_obj po;
+	zepto_parser_init( &po, packet );
+	zepto_parse_read_block( &po, resend.packet_data, resend.packet_sz );
+	resend.checksum = checksum;
+	resend.resend_cnt = SIOT_MESH_SUBJECT_FOR_MESH_RESEND;
+	sa_time_val diff_tval;
+	TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
+	sa_hal_time_val_copy_from( &(resend.next_resend_time), currt );
+	SA_TIME_INCREMENT_BY_TICKS( resend.next_resend_time, diff_tval );
+	pending_resends.push_back( resend );
+
+	// 2. calculate time to the nearest event
+	PENDING_RESENDS_ITERATOR it;
+	SA_TIME_SET_INFINITE_TIME( *time_to_next_event );
+	sa_time_val remaining;
+	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
+	{
+		bool in_future = sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), &remaining );
+		sa_hal_time_val_copy_from_if_src_less( time_to_next_event, &remaining );
+		if ( !in_future )
+			break;
+	}
+}
+
+bool siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* time_period_next_resend, uint16_t* target_id )
+{
+	PENDING_RESENDS_ITERATOR it;
+
+	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
+	{
+		ZEPTO_DEBUG_ASSERT( it->resend_cnt > 0 );
+//		if ( sa_hal_time_val_is_less( sa_time_val* t1, sa_time_val* t2 ) )
+	}
+
+	*target_id = it->target_id;
+	zepto_parser_free_memory( packet );
+	zepto_write_block( packet, it->packet_data, it->packet_sz );
+	SA_TIME_INCREMENT_BY_TICKS( it->next_resend_time, *time_period_next_resend );
+	( it->resend_cnt ) --;
+
+	return 0;
+}

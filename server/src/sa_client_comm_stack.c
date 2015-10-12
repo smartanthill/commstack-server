@@ -125,6 +125,8 @@ int main_loop()
 		sagdp_init( &(devices[dev_in_use].sagdp_context_ctr) );
 	}
 	siot_mesh_init_tables();
+		
+	uint16_t link_id;
 
 	// MAIN LOOP
 	for (;;)
@@ -169,13 +171,19 @@ wait_for_comm_event:
 		}
 
 		// 2. MESH
-		ret_code = handler_siot_mesh_timer( &currt, &wait_for,  working_handle.packet_h, &dev_in_use );
+		uint16_t target_device_id;
+		ret_code = handler_siot_mesh_timer( &currt, &wait_for,  working_handle.packet_h, &target_device_id, &link_id );
 		switch ( ret_code )
 		{
+			case SIOT_MESH_RET_PASS_TO_SEND:
+			{
+				goto hal_send;
+				break;
+			}
 			case SIOT_MESH_RET_PASS_TO_CCP:
 			{
 				ZEPTO_DEBUG_ASSERT( dev_in_use > 0 );
-				dev_in_use--;
+				dev_in_use = target_device_id - 1;
 				// quite dirty and temporary solution
 				zepto_response_to_request(  working_handle.packet_h );
 				ZEPTO_DEBUG_PRINTF_1( "         ############  about to jump to sagdp with route update reply  ###########\n" );
@@ -747,7 +755,6 @@ saoudp_send:
 		}
 
 #if SIOT_MESH_IMPLEMENTATION_WORKS
-		uint16_t link_id;
 		ret_code = handler_siot_mesh_send_packet( &currt, &wait_for, devices[dev_in_use].device_id,  working_handle.packet_h, working_handle.resend_cnt, &link_id ); // currently we know only about a single client with id=1
 		zepto_response_to_request(  working_handle.packet_h );
 

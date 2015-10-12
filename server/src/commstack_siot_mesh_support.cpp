@@ -789,28 +789,72 @@ void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val*
 	sa_time_val remaining;
 	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
 	{
-		bool in_future = sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), &remaining );
+		uint8_t in_future = sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), &remaining );
 		sa_hal_time_val_copy_from_if_src_less( time_to_next_event, &remaining );
 		if ( !in_future )
 			break;
 	}
 }
 
-bool siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* time_period_next_resend, uint16_t* target_id )
+uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, sa_time_val* time_to_next_event )
 {
-	PENDING_RESENDS_ITERATOR it;
+	PENDING_RESENDS_ITERATOR it, it_oldest = pending_resends.end();
+	sa_time_val oldest_time_point;
+	sa_hal_time_val_copy_from( &oldest_time_point, currt );
+
+	if ( pending_resends.size() == 0 )
+		return SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NONE_EXISTS;
+
+	bool one_found = false;
 
 	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
 	{
 		ZEPTO_DEBUG_ASSERT( it->resend_cnt > 0 );
-//		if ( sa_hal_time_val_is_less( sa_time_val* t1, sa_time_val* t2 ) )
+		if ( it_oldest == pending_resends.end() )
+		{
+			if ( sa_hal_time_val_is_less_eq( &(it->next_resend_time), &oldest_time_point ) ) // used slot is yet older
+			{
+				sa_hal_time_val_copy_from( &oldest_time_point, &(it->next_resend_time) );
+				it_oldest = it;
+			}
+		}
+		else
+		{
+			if ( sa_hal_time_val_is_less( &(it->next_resend_time), &oldest_time_point ) ) // used slot is yet older
+			{
+				sa_hal_time_val_copy_from( &oldest_time_point, &(it->next_resend_time) );
+				it_oldest = it;
+			}
+		}
 	}
 
-	*target_id = it->target_id;
-	zepto_parser_free_memory( packet );
-	zepto_write_block( packet, it->packet_data, it->packet_sz );
-	SA_TIME_INCREMENT_BY_TICKS( it->next_resend_time, *time_period_next_resend );
-	( it->resend_cnt ) --;
+	if ( it_oldest == pending_resends.end() ) // none good for present time; just calculate time to wake up us next time
+	{
+		for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
+			sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), time_to_next_event );
+		return SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NOT_NOW;
+	}
 
-	return 0;
+	// there is a packet to resend
+	bool final_in_seq = it->resend_cnt == 1;
+	ZEPTO_DEBUG_ASSERT( it->resend_cnt > 0 );
+	*target_id = it_oldest->target_id;
+	zepto_parser_free_memory( packet );
+	zepto_write_block( packet, it_oldest->packet_data, it_oldest->packet_sz );
+	if ( final_in_seq )
+	{
+		if ( it->packet_data != NULL )
+			delete [] it->packet_data;
+		pending_resends.erase( it );
+	}
+	else
+	{
+		(it->resend_cnt) --;
+		sa_time_val diff_tval;
+		TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
+		sa_hal_time_val_copy_from( &(it->next_resend_time), currt );
+		SA_TIME_INCREMENT_BY_TICKS( it->next_resend_time, diff_tval );
+	}
+
+	return final_in_seq ? SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL : SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM;
 }

@@ -47,7 +47,7 @@ using namespace std;
 typedef vector< SIOT_MESH_ROUTE > SIOT_M_ROUTE_TABLE_TYPE;
 typedef vector< SIOT_MESH_LINK > SIOT_M_LINK_TABLE_TYPE;
 
-typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA
+typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA // used to keep copies of respective tables at devices
 {
 	uint16_t device_id;
 	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table;
@@ -57,7 +57,7 @@ typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA
 typedef vector< SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA > SIOT_MESH_ROUTING_DATA;
 typedef vector< SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA >::iterator SIOT_MESH_ROUTING_DATA_ITERATOR;
 
-SIOT_MESH_ROUTING_DATA mesh_routing_data;
+SIOT_MESH_ROUTING_DATA mesh_routing_data; // copies of respective tables at devices
 
 typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE
 {
@@ -570,6 +570,22 @@ uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_
 	return SIOT_MESH_RET_ERROR_NOT_FOUND;
 }
 
+uint8_t siot_mesh_at_root_remove_link_to_target( uint16_t target_id )
+{
+	uint16_t i, j;
+
+	for ( i=0; i<mesh_routing_data.size(); i++)
+		if ( mesh_routing_data[i].device_id == 0 )
+			for ( j=0; j<mesh_routing_data[i].siot_m_route_table.size(); j++ )
+				if ( mesh_routing_data[i].siot_m_route_table[j].TARGET_ID == target_id )
+				{
+					// TODO: should we delete link as well? Under which conditions?
+					mesh_routing_data[i].siot_m_route_table.erase( mesh_routing_data[i].siot_m_route_table.begin() + j );
+					return SIOT_MESH_RET_OK;
+				}
+	return SIOT_MESH_RET_ERROR_NOT_FOUND;
+}
+
 uint8_t siot_mesh_get_link( uint16_t device_id, uint16_t link_id, SIOT_MESH_LINK* link )
 {
 	uint16_t i, j;
@@ -761,8 +777,8 @@ typedef struct _MESH_PENDING_RESENDS
 	uint16_t target_id;
 } MESH_PENDING_RESENDS;
 
-typedef vector< MESH_PENDING_RESENDS > PENDING_RESENDS;
-typedef vector< MESH_PENDING_RESENDS >::iterator PENDING_RESENDS_ITERATOR;
+typedef list< MESH_PENDING_RESENDS > PENDING_RESENDS;
+typedef list< MESH_PENDING_RESENDS >::iterator PENDING_RESENDS_ITERATOR;
 PENDING_RESENDS pending_resends;
 
 void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, sa_time_val* time_to_next_event )
@@ -856,5 +872,37 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 		SA_TIME_INCREMENT_BY_TICKS( it->next_resend_time, diff_tval );
 	}
 
+	// now we calculate remaining time for only actually remaining tasks
+	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
+		sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), time_to_next_event );
+
 	return final_in_seq ? SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL : SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM;
+}
+
+void siot_mesh_at_root_remove_resend_task( uint16_t checksum, const sa_time_val* currt, sa_time_val* time_to_next_event )
+{
+	PENDING_RESENDS_ITERATOR it = pending_resends.begin(), it_erase;
+	sa_time_val oldest_time_point;
+	sa_hal_time_val_copy_from( &oldest_time_point, currt );
+
+	if ( pending_resends.size() == 0 )
+		return;
+
+	bool one_found = false;
+
+	while ( it != pending_resends.end() )
+	{
+		if ( it->checksum == checksum )
+		{
+			it_erase = it;
+			++it;
+			pending_resends.erase( it_erase);
+		}
+		else
+			++it;
+	}
+
+	// now we calculate remaining time for only actually remaining tasks
+	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
+		sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), time_to_next_event );
 }

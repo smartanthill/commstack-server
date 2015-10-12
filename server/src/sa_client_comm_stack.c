@@ -333,7 +333,7 @@ wait_for_comm_event:
 		// 2.0. Pass to siot/mesh
 	siotmp_rec:
 #if SIOT_MESH_IMPLEMENTATION_WORKS
-		ret_code = handler_siot_mesh_receive_packet(  working_handle.packet_h, MEMORY_HANDLE_MESH_ACK, &dev_in_use, 0, 0 ); // TODO: add actual connection quality
+		ret_code = handler_siot_mesh_receive_packet( &currt, &wait_for, working_handle.packet_h, MEMORY_HANDLE_MESH_ACK, &dev_in_use, 0, 0 ); // TODO: add actual connection quality
 		dev_in_use--;
 		ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
 		zepto_response_to_request(  working_handle.packet_h );

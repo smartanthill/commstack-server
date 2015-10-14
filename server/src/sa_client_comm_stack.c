@@ -108,7 +108,8 @@ int main_loop()
 	waiting_for wait_for;
 	ZEPTO_MEMSET( &wait_for, 0, sizeof( waiting_for ) );
 	wait_for.wait_packet = 1;
-	TIME_MILLISECONDS16_TO_TIMEVAL( 1000, wait_for.wait_time ) //+++TODO: actual processing throughout the code
+//	TIME_MILLISECONDS16_TO_TIMEVAL( 1000, wait_for.wait_time ) //+++TODO: actual processing throughout the code
+	SA_TIME_SET_INFINITE_TIME( wait_for.wait_time );
 
 	uint8_t timer_val = 0x1;
 	// TODO: revise time/timer management

@@ -788,6 +788,7 @@ void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val*
 	resend.target_id = target_id;
 	resend.packet_sz = memory_object_get_request_size( packet );
 	resend.packet_data = new uint8_t [resend.packet_sz];
+	ZEPTO_DEBUG_ASSERT( resend.packet_sz != 0 );
 	parser_obj po;
 	zepto_parser_init( &po, packet );
 	zepto_parse_read_block( &po, resend.packet_data, resend.packet_sz );
@@ -821,7 +822,7 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 	if ( pending_resends.size() == 0 )
 		return SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NONE_EXISTS;
 
-	bool one_found = false;
+//	bool one_found = false;
 
 	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
 	{
@@ -852,24 +853,24 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 	}
 
 	// there is a packet to resend
-	bool final_in_seq = it->resend_cnt == 1;
-	ZEPTO_DEBUG_ASSERT( it->resend_cnt > 0 );
+	bool final_in_seq = it_oldest->resend_cnt == 1;
+	ZEPTO_DEBUG_ASSERT( it_oldest->resend_cnt > 0 );
 	*target_id = it_oldest->target_id;
 	zepto_parser_free_memory( packet );
 	zepto_write_block( packet, it_oldest->packet_data, it_oldest->packet_sz );
 	if ( final_in_seq )
 	{
-		if ( it->packet_data != NULL )
-			delete [] it->packet_data;
-		pending_resends.erase( it );
+		if ( it_oldest->packet_data != NULL )
+			delete [] it_oldest->packet_data;
+		pending_resends.erase( it_oldest );
 	}
 	else
 	{
-		(it->resend_cnt) --;
+		(it_oldest->resend_cnt) --;
 		sa_time_val diff_tval;
 		TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
-		sa_hal_time_val_copy_from( &(it->next_resend_time), currt );
-		SA_TIME_INCREMENT_BY_TICKS( it->next_resend_time, diff_tval );
+		sa_hal_time_val_copy_from( &(it_oldest->next_resend_time), currt );
+		SA_TIME_INCREMENT_BY_TICKS( it_oldest->next_resend_time, diff_tval );
 	}
 
 	// now we calculate remaining time for only actually remaining tasks

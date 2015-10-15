@@ -777,7 +777,7 @@ typedef struct _MESH_PENDING_RESENDS
 	uint16_t target_id;
 } MESH_PENDING_RESENDS;
 
-typedef list< MESH_PENDING_RESENDS > PENDING_RESENDS;
+typedef list< MESH_PENDING_RESENDS > PENDING_RESENDS; // NOTE: switching to vector requires revision of code around calls to erase()
 typedef list< MESH_PENDING_RESENDS >::iterator PENDING_RESENDS_ITERATOR;
 PENDING_RESENDS pending_resends;
 
@@ -880,7 +880,7 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 	return final_in_seq ? SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL : SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM;
 }
 
-void siot_mesh_at_root_remove_resend_task( uint16_t checksum, const sa_time_val* currt, sa_time_val* time_to_next_event )
+void siot_mesh_at_root_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val* currt, sa_time_val* time_to_next_event )
 {
 	PENDING_RESENDS_ITERATOR it = pending_resends.begin(), it_erase;
 	sa_time_val oldest_time_point;
@@ -894,6 +894,34 @@ void siot_mesh_at_root_remove_resend_task( uint16_t checksum, const sa_time_val*
 	while ( it != pending_resends.end() )
 	{
 		if ( it->checksum == checksum )
+		{
+			it_erase = it;
+			++it;
+			pending_resends.erase( it_erase);
+		}
+		else
+			++it;
+	}
+
+	// now we calculate remaining time for only actually remaining tasks
+	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
+		sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), time_to_next_event );
+}
+
+void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, const sa_time_val* currt, sa_time_val* time_to_next_event )
+{
+	PENDING_RESENDS_ITERATOR it = pending_resends.begin(), it_erase;
+	sa_time_val oldest_time_point;
+	sa_hal_time_val_copy_from( &oldest_time_point, currt );
+
+	if ( pending_resends.size() == 0 )
+		return;
+
+	bool one_found = false;
+
+	while ( it != pending_resends.end() )
+	{
+		if ( it->target_id == target_id )
 		{
 			it_erase = it;
 			++it;

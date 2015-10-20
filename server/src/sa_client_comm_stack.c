@@ -128,6 +128,7 @@ int main_loop()
 	siot_mesh_init_tables();
 		
 	uint16_t link_id;
+	uint16_t target_device_id;
 
 	// MAIN LOOP
 	for (;;)
@@ -171,8 +172,8 @@ wait_for_comm_event:
 			}
 		}
 
+#if SIOT_MESH_IMPLEMENTATION_WORKS
 		// 2. MESH
-		uint16_t target_device_id;
 		ret_code = handler_siot_mesh_timer( &currt, &wait_for,  working_handle.packet_h, &target_device_id, &link_id );
 		switch ( ret_code )
 		{
@@ -231,6 +232,7 @@ wait_for_comm_event:
 				break;
 			}
 		}
+#endif // SIOT_MESH_IMPLEMENTATION_WORKS
 
 		// 3. (next candidate)
 
@@ -502,7 +504,7 @@ wait_for_comm_event:
 					// we add a quick jump here to intercept packets for Mesh Protocol itself
 					// TODO: full CCP processing must be done here
 					parser_obj po, po1;
-					zepto_parser_init( &po,  working_handle.packet_h );
+					zepto_parser_init( &po, working_handle.packet_h );
 
 					uint8_t first_byte = zepto_parse_uint8( &po );
 					uint16_t packet_head = zepto_parse_encoded_uint16( &po );

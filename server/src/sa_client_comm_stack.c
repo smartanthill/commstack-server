@@ -34,7 +34,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 //DECLARE_AES_ENCRYPTION_KEY
 
-#define MAX_INSTANCES_SUPPORTED 32
+#define MAX_INSTANCES_SUPPORTED 1
 typedef struct _DEVICE_CONTEXT
 {
 	uint16_t device_id;

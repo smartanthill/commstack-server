@@ -889,8 +889,6 @@ void siot_mesh_at_root_remove_resend_task_by_hash( uint16_t checksum, const sa_t
 	if ( pending_resends.size() == 0 )
 		return;
 
-	bool one_found = false;
-
 	while ( it != pending_resends.end() )
 	{
 		if ( it->checksum == checksum )
@@ -916,8 +914,6 @@ void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, cons
 
 	if ( pending_resends.size() == 0 )
 		return;
-
-	bool one_found = false;
 
 	while ( it != pending_resends.end() )
 	{

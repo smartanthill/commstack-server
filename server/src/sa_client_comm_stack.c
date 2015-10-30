@@ -179,6 +179,7 @@ wait_for_comm_event:
 		{
 			case SIOT_MESH_RET_PASS_TO_SEND:
 			{
+				zepto_response_to_request( working_handle.packet_h );
 				goto hal_send;
 				break;
 			}
@@ -187,7 +188,7 @@ wait_for_comm_event:
 				ZEPTO_DEBUG_ASSERT( dev_in_use > 0 );
 				dev_in_use = target_device_id - 1;
 				// quite dirty and temporary solution
-				zepto_response_to_request(  working_handle.packet_h );
+				zepto_response_to_request( working_handle.packet_h );
 				ZEPTO_DEBUG_PRINTF_1( "         ############  about to jump to sagdp with route update reply  ###########\n" );
 //				goto sagdpsend;
 				zepto_parser_free_memory( working_handle.addr_h );

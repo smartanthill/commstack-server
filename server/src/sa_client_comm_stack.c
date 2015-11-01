@@ -364,6 +364,8 @@ wait_for_comm_event:
 				break;
 			}
 			case SIOT_MESH_RET_GARBAGE_RECEIVED:
+			case SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED:
+			case SIOT_MESH_RET_OK:
 			{
 				goto wait_for_comm_event;
 				break;

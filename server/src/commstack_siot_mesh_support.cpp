@@ -1143,6 +1143,8 @@ void siot_mesh_at_root_remove_resend_task_by_hash( uint16_t checksum, const sa_t
 		{
 			it_erase = it;
 			++it;
+			if ( it_erase->packet_data )
+				delete [] it_erase->packet_data;
 			pending_resends.erase( it_erase);
 		}
 		else
@@ -1169,6 +1171,8 @@ void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, cons
 		{
 			it_erase = it;
 			++it;
+			if ( it_erase->packet_data )
+				delete [] it_erase->packet_data;
 			pending_resends.erase( it_erase);
 		}
 		else

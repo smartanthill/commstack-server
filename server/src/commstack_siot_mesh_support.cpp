@@ -378,6 +378,7 @@ uint8_t siot_mesh_at_root_add_or_merge_updates_when_route_is_added( SIOT_MESH_RO
 	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it;
 	for ( i=update_list.size()-1; i>=0; i-- )
 	{
+		ZEPTO_DEBUG_ASSERT( update_list[i].siot_m_link_table_update.size() || update_list[i].siot_m_route_table_update.size() );
 		bool added = false;
 		for ( it = mesh_routing_data_updates.begin(); it != mesh_routing_data_updates.end(); ++it )
 		{
@@ -477,28 +478,40 @@ uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA
 	{
 		bool applied = false;
 		int ini_sz = dev_data->siot_m_route_table.size();
-		for ( j=0; j<ini_sz; j++ )
-			if ( dev_data->siot_m_route_table[j].TARGET_ID == update->siot_m_route_table_update[i].TARGET_ID )
-			{
-				if ( update->to_add )
-					dev_data->siot_m_route_table[j].LINK_ID = update->siot_m_route_table_update[i].LINK_ID;
-				else
-					dev_data->siot_m_route_table.erase( dev_data->siot_m_route_table.begin() + j );
-				applied = true;
-				break;
-			}
-			else if ( dev_data->siot_m_route_table[j].TARGET_ID < update->siot_m_route_table_update[i].TARGET_ID ) // as soon as.... (we exploit canonicity here)
-			{
-				if ( update->to_add )
-					dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin() + j, update->siot_m_route_table_update[i] );
-				applied = true;
-				break;
-			}
+		if ( ini_sz == 0 || dev_data->siot_m_route_table[0].TARGET_ID > update->siot_m_route_table_update[i].TARGET_ID )
+		{
+			if ( update->to_add )
+				dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin(), update->siot_m_route_table_update[i] );
+			applied = true;
+		}
+		if ( !applied )
+		{
+			for ( j=0; j<ini_sz; j++ )
+				if ( dev_data->siot_m_route_table[j].TARGET_ID == update->siot_m_route_table_update[i].TARGET_ID )
+				{
+					if ( update->to_add )
+						dev_data->siot_m_route_table[j].LINK_ID = update->siot_m_route_table_update[i].LINK_ID;
+					else
+						dev_data->siot_m_route_table.erase( dev_data->siot_m_route_table.begin() + j );
+					applied = true;
+					break;
+				}
+				else if ( dev_data->siot_m_route_table[j].TARGET_ID < update->siot_m_route_table_update[i].TARGET_ID ) // as soon as.... (we exploit canonicity here)
+				{
+					if ( update->to_add )
+						dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin() + j + 1, update->siot_m_route_table_update[i] );
+					applied = true;
+					break;
+				}
+		}
 		if ( !applied ) // something new
 		{
-			ZEPTO_DEBUG_ASSERT( dev_data->siot_m_route_table.size() == 0 || dev_data->siot_m_route_table[ dev_data->siot_m_route_table.size() - 1 ].TARGET_ID < update->siot_m_route_table_update[i].TARGET_ID );
 			if ( update->to_add )
+			{
+				ZEPTO_DEBUG_ASSERT( dev_data->siot_m_route_table.size() == 0 || dev_data->siot_m_route_table[ dev_data->siot_m_route_table.size() - 1 ].TARGET_ID < update->siot_m_route_table_update[i].TARGET_ID );
 				dev_data->siot_m_route_table.push_back( update->siot_m_route_table_update[i] );
+			}
+			// TODO: think about 'else' case
 		}
 	}
 
@@ -506,28 +519,40 @@ uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_ALL_ROUTING_DATA
 	{
 		bool applied = false;
 		int ini_sz = dev_data->siot_m_link_table.size();
-		for ( j=0; j<ini_sz; j++ )
-			if ( dev_data->siot_m_link_table[j].LINK_ID == update->siot_m_link_table_update[i].LINK_ID )
-			{
-				if ( update->to_add )
-					dev_data->siot_m_link_table[j].LINK_ID = update->siot_m_link_table_update[i].LINK_ID;
-				else
-					dev_data->siot_m_link_table.erase( dev_data->siot_m_link_table.begin() + j );
-				applied = true;
-				break;
-			}
-			else if ( dev_data->siot_m_link_table[j].LINK_ID < update->siot_m_link_table_update[i].LINK_ID ) // as soon as.... (we exploit canonicity here)
-			{
-				if ( update->to_add )
-					dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin() + j, update->siot_m_link_table_update[i] );
-				applied = true;
-				break;
-			}
+		if ( ini_sz == 0 || dev_data->siot_m_link_table[0].LINK_ID > update->siot_m_link_table_update[i].LINK_ID )
+		{
+			if ( update->to_add )
+				dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin(), update->siot_m_link_table_update[i] );
+			applied = true;
+		}
 		if ( !applied ) // something new
 		{
-			ZEPTO_DEBUG_ASSERT( dev_data->siot_m_link_table.size() == 0 || dev_data->siot_m_link_table[ dev_data->siot_m_link_table.size() - 1 ].LINK_ID < update->siot_m_link_table_update[i].LINK_ID );
+			for ( j=0; j<ini_sz; j++ )
+				if ( dev_data->siot_m_link_table[j].LINK_ID == update->siot_m_link_table_update[i].LINK_ID )
+				{
+					if ( update->to_add )
+						dev_data->siot_m_link_table[j].LINK_ID = update->siot_m_link_table_update[i].LINK_ID;
+					else
+						dev_data->siot_m_link_table.erase( dev_data->siot_m_link_table.begin() + j );
+					applied = true;
+					break;
+				}
+				else if ( dev_data->siot_m_link_table[j].LINK_ID < update->siot_m_link_table_update[i].LINK_ID ) // as soon as.... (we exploit canonicity here)
+				{
+					if ( update->to_add )
+						dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin() + j + 1, update->siot_m_link_table_update[i] );
+					applied = true;
+					break;
+				}
+		}
+		if ( !applied ) // something new
+		{
 			if ( update->to_add )
+			{
+				ZEPTO_DEBUG_ASSERT( dev_data->siot_m_link_table.size() == 0 || dev_data->siot_m_link_table[ dev_data->siot_m_link_table.size() - 1 ].LINK_ID < update->siot_m_link_table_update[i].LINK_ID );
 				dev_data->siot_m_link_table.push_back( update->siot_m_link_table_update[i] );
+			}
+			// TODO: think about 'else' case
 		}
 	}
 
@@ -810,7 +835,10 @@ void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t repo
 			}
 			if ( used_links != NULL ) delete [] used_links;
 
-			mesh_routing_data_updates.push_back( update );
+			// NOTE: above procedures do not guarantee that the 'update' is not empty
+			// TODO: ensure that empty 'update' is legitimate in all cases
+			if ( update.siot_m_link_table_update.size() || update.siot_m_route_table_update.size() )
+				mesh_routing_data_updates.push_back( update );
 		}
 
 		vector<int>& tmp = prev_list;

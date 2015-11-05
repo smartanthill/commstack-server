@@ -46,12 +46,15 @@ using namespace std;
 
 typedef vector< SIOT_MESH_ROUTE > SIOT_M_ROUTE_TABLE_TYPE;
 typedef vector< SIOT_MESH_LINK > SIOT_M_LINK_TABLE_TYPE;
+typedef vector< int > SIOT_M_BUS_TYPE_LIST_TYPE;
 
 typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA // used to keep copies of respective tables at devices
 {
 	uint16_t device_id;
+	bool is_retransmitter;
 	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table;
 	SIOT_M_LINK_TABLE_TYPE siot_m_link_table;
+	SIOT_M_BUS_TYPE_LIST_TYPE bus_type_list;
 } SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA;
 
 typedef vector< SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA > SIOT_MESH_ROUTING_DATA;
@@ -137,16 +140,41 @@ void dbg_siot_mesh_at_root_validate_all_device_tables()
 
 void siot_mesh_init_tables()  // TODO: this call reflects current development stage and may or may not survive in the future
 {
-	// as soon as pairing is implemented below code will be removed
+	// manual device adding
+	// as soon as pairing is implemented below code will be removed or heavily revised
+
 	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA data;
+
+	// 0. Root device
 	data.device_id = 0;
+	data.is_retransmitter = false;
+	data.bus_type_list.push_back( 1 );
 	mesh_routing_data.push_back( data );
+
+	// 1. retransmitter
 	data.device_id = 1;
+	data.is_retransmitter = true;
+	data.bus_type_list.clear();
+	data.bus_type_list.push_back( 0 );
+	data.bus_type_list.push_back( 1 );
+	mesh_routing_data.push_back( data );
+
+	// 2-5. terminating
+	data.is_retransmitter = false;
+	data.device_id = 2;
+	data.bus_type_list.clear();
+	data.bus_type_list.push_back( 0 );
+	mesh_routing_data.push_back( data );
+	data.device_id = 3;
+	mesh_routing_data.push_back( data );
+	data.device_id = 4;
+	mesh_routing_data.push_back( data );
+	data.device_id = 5;
 	mesh_routing_data.push_back( data );
 }
 
 ///////////////////   Basic calls: device list  //////////////////////
-
+/*
 uint8_t siot_mesh_at_root_add_device( uint16_t device_id )
 {
 	uint16_t i;
@@ -170,7 +198,7 @@ uint8_t siot_mesh_at_root_remove_device( uint16_t device_id )
 		}
 	return SIOT_MESH_AT_ROOT_RET_NOT_FOUND;
 }
-
+*/
 uint8_t siot_mesh_at_root_get_device_data( uint16_t device_id, SIOT_MESH_ROUTING_DATA_ITERATOR& it )
 {
 	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )
@@ -178,6 +206,35 @@ uint8_t siot_mesh_at_root_get_device_data( uint16_t device_id, SIOT_MESH_ROUTING
 			return SIOT_MESH_AT_ROOT_RET_OK;
 
 	return SIOT_MESH_AT_ROOT_RET_NOT_FOUND;
+}
+
+uint8_t write_bus_types_for_device_for_from_santa_packet( MEMORY_HANDLE mem_h, uint16_t device_id )
+{
+	SIOT_MESH_ROUTING_DATA_ITERATOR it;
+	uint8_t ret = siot_mesh_at_root_get_device_data( device_id, it );
+	if ( ret != SIOT_MESH_AT_ROOT_RET_OK )
+		return ret;
+	unsigned int i;
+	for ( i=0; i<it->bus_type_list.size(); i++)
+		zepto_write_uint8( mem_h, it->bus_type_list[i] + 1 );
+	zepto_write_uint8( mem_h, 0 ); // list terminator
+	return SIOT_MESH_AT_ROOT_RET_OK;
+}
+
+uint16_t write_retransmitter_list_for_from_santa_packet( MEMORY_HANDLE mem_h )
+{
+	SIOT_MESH_ROUTING_DATA_ITERATOR it;
+	uint16_t count = 0;
+	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )
+		if ( it->is_retransmitter )
+		{
+			uint8_t more_data_in_record = 0;
+			uint16_t header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
+			zepto_parser_encode_and_append_uint16( mem_h, header );
+			count++;
+		}
+	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
+	return count;
 }
 
 
@@ -802,13 +859,13 @@ void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t repo
 						SIOT_MESH_ROUTE route;
 						route.TARGET_ID = non_reached_device_ids[j];
 						update.siot_m_route_table_update.push_back( route );
-						int lnk;
+						unsigned int lnk;
 						for ( lnk=0; lnk<mesh_routing_data[prev_list[idx]].siot_m_link_table.size(); lnk++ )
 							if ( mesh_routing_data[prev_list[idx]].siot_m_link_table[lnk].LINK_ID == lnk )
 							{
 								uint16_t next_hop_id = mesh_routing_data[prev_list[idx]].siot_m_link_table[lnk].NEXT_HOP;
 								bool found2 = false;
-								int rt;
+								unsigned int rt;
 								for ( rt=0; rt<next_list.size(); rt++ )
 									if ( next_hop_id == next_list[rt] )
 									{

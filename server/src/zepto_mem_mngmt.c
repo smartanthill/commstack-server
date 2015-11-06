@@ -17,6 +17,12 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include <simpleiot_hal/siot_mem_mngmt.h>
 
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#ifdef SA_DEBUG
+bool skip_sanity_check = false;
+#endif
+#endif
+
 #define MEM_MNGMT_ORDERED_HANDLES
 
 //#define MEM_MNGMT_OLD_APPROACH	// TODO: test "new" and get rid of this "old" approach
@@ -27,20 +33,57 @@ typedef struct _request_reply_mem_obj
 	uint16_t rq_size;
 	uint16_t rsp_size;
 } request_reply_mem_obj;
+/*
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+typedef struct _request_reply_mem_obj_acquirable
+{
+	uint8_t in_use;
+	uint8_t* ptr; // TODO: switch to offfset
+	uint16_t rq_size;
+	uint16_t rsp_size;
+} request_reply_mem_obj_acquirable;
+#endif
+*/
 
+// TODO: sizes defined below should be a part of project configuration 
+#ifdef USED_AS_MASTER
 #define BASE_MEM_BLOCK_SIZE	0x1000
-uint8_t BASE_MEM_BLOCK[ BASE_MEM_BLOCK_SIZE ];
-request_reply_mem_obj memory_objects[ MEMORY_HANDLE_MAX ]; // fixed size array for a while
+#else // USED_AS_MASTER
+#ifdef USED_AS_RETRANSMITTER
+#define BASE_MEM_BLOCK_SIZE	0x400
+#else // USED_AS_RETRANSMITTER
+#define BASE_MEM_BLOCK_SIZE	0x180
+#endif // USED_AS_RETRANSMITTER
+#endif // USED_AS_MASTER
 
-#define ASSERT_MEMORY_HANDLE_VALID( h ) ZEPTO_DEBUG_ASSERT( h!= MEMORY_HANDLE_INVALID && h < MEMORY_HANDLE_MAX && memory_objects[h].ptr > BASE_MEM_BLOCK && memory_objects[h].ptr < BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE );
-#define CHECK_AND_PRINT_INVALID_HANDLE( h ) \
+uint8_t BASE_MEM_BLOCK[ BASE_MEM_BLOCK_SIZE ];
+request_reply_mem_obj memory_objects[ MEMORY_HANDLE_MAX ]; // fixed size array for predefined handles
+
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#ifdef SA_DEBUG
+#define ASSERT_MEMORY_HANDLE_VALID( h ) { \
+	if ( h < MEMORY_HANDLE_MAX ) ZEPTO_DEBUG_ASSERT( memory_objects[h].ptr > BASE_MEM_BLOCK && memory_objects[h].ptr < BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE ); \
+	else { \
+		request_reply_mem_obj* obj = ((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr )) + h - MEMORY_HANDLE_ACQUIRABLE_START; \
+		ZEPTO_DEBUG_ASSERT( (uint8_t*)obj < memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size ); \
+		ZEPTO_DEBUG_ASSERT( obj->ptr != NULL ); \
+		ZEPTO_DEBUG_ASSERT( obj->ptr + obj->rq_size + obj->rsp_size < BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE ); }}
+
+#else // SA_DEBUG
+#define ASSERT_MEMORY_HANDLE_VALID( h )
+#endif // SA_DEBUG
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#define ASSERT_MEMORY_HANDLE_VALID( h ) ZEPTO_DEBUG_ASSERT( h < MEMORY_HANDLE_MAX && memory_objects[h].ptr > BASE_MEM_BLOCK && memory_objects[h].ptr < BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE );
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+
+/*#define CHECK_AND_PRINT_INVALID_HANDLE( h ) \
 	if ( !(h!= MEMORY_HANDLE_INVALID && h < MEMORY_HANDLE_MAX && memory_objects[h].ptr > BASE_MEM_BLOCK && memory_objects[h].ptr < BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE) ) \
 	{ \
 		ZEPTO_DEBUG_PRINTF_2( "Invalid handle: h = %d", h ); \
 		if ( h < MEMORY_HANDLE_MAX ) \
 			ZEPTO_DEBUG_PRINTF_3( ", ptr = 0x%x (base = 0x%x)", memory_objects[h].ptr, BASE_MEM_BLOCK );\
 		ZEPTO_DEBUG_PRINTF_1( "\n" ); \
-	}
+	}*/
 
 // helpers
 
@@ -126,7 +169,12 @@ uint16_t zepto_mem_man_ever_reached = 0;
 
 void zepto_mem_man_print_mem_stats()
 {
-/*	uint8_t i;
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#ifdef SA_DEBUG
+	if ( skip_sanity_check ) return;
+#endif
+#endif
+	uint8_t i;
 	uint16_t total_mem = 0;
 	ZEPTO_DEBUG_PRINTF_1( "Memory stats:\n" );
 	for ( i=0; i<MEMORY_HANDLE_MAX; i++ )
@@ -134,22 +182,64 @@ void zepto_mem_man_print_mem_stats()
 		ZEPTO_DEBUG_PRINTF_6( "[%d] @[+%d (0x%02x)]:\t%d\t%d\n", i, i, (uint16_t)(memory_objects[i].ptr - BASE_MEM_BLOCK), memory_objects[i].rq_size, memory_objects[i].rsp_size );
 		total_mem += memory_objects[i].rq_size + memory_objects[i].rsp_size;
 	}
-	ZEPTO_DEBUG_PRINTF_3( "Size actually used: %d bytes (%d bytes max)\n\n", total_mem, zepto_mem_man_ever_reached );*/
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	ZEPTO_DEBUG_ASSERT( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size == 0 );
+	ZEPTO_DEBUG_PRINTF_2( "+++ %d (max) acquired handles +++\n", (memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size) / sizeof( request_reply_mem_obj ) );
+	uint16_t j;
+	for ( j=0; j<memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size; j+=sizeof( request_reply_mem_obj ) )
+	{
+		request_reply_mem_obj* obj = (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + j );
+		if ( obj->ptr )
+		{
+			ZEPTO_DEBUG_PRINTF_6( "[%d] @[+%d (0x%02x)]:\t%d\t%d\n", i+j, i+j, (uint16_t)(obj->ptr - BASE_MEM_BLOCK), obj->rq_size, obj->rsp_size );
+			total_mem += obj->rq_size + obj->rsp_size;
+		}
+	}
+	ZEPTO_DEBUG_ASSERT( j == memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+#endif
+	ZEPTO_DEBUG_PRINTF_3( "Size actually used: %d bytes (%d bytes max)\n\n", total_mem, zepto_mem_man_ever_reached );
 }
 
 void zepto_mem_man_update_ever_reached()
 {
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#ifdef SA_DEBUG
+	if ( skip_sanity_check ) return;
+#endif
+#endif
 	uint8_t i;
 	uint16_t total_mem = 0;
 	for ( i=0; i<MEMORY_HANDLE_MAX; i++ )
 	{
 		total_mem += memory_objects[i].rq_size + memory_objects[i].rsp_size;
 	}
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	ZEPTO_DEBUG_ASSERT( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size == 0 );
+	uint16_t j;
+	for ( j=0; j<memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size; j+=sizeof( request_reply_mem_obj ) )
+	{
+		request_reply_mem_obj* obj = (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + j );
+		if ( obj->ptr )
+			total_mem += obj->rq_size + obj->rsp_size;
+	}
+	ZEPTO_DEBUG_ASSERT( j == memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+#endif
 	if ( zepto_mem_man_ever_reached < total_mem ) zepto_mem_man_ever_reached = total_mem;
 }
 
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#define MEMORY_OBJECT_PTR( i ) ( i < MEMORY_HANDLE_MAX ? memory_objects + i  : (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr ) + i - MEMORY_HANDLE_MAX )
+#else
+#define MEMORY_OBJECT_PTR( i ) (memory_objects + i )
+#endif
+
 void zepto_mem_man_check_sanity()
 {
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#ifdef SA_DEBUG
+	if ( skip_sanity_check ) return;
+#endif
+#endif
 	uint8_t i;
 
 	for ( i=0; i<MEMORY_HANDLE_MAX; i++ )
@@ -157,8 +247,80 @@ void zepto_mem_man_check_sanity()
 		if ( memory_objects[i].rq_size + memory_objects[i].rsp_size )
 			ZEPTO_DEBUG_ASSERT( memory_objects[i].ptr != 0 );
 	}
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	ZEPTO_DEBUG_ASSERT( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size == 0 );
+	uint16_t j;
+	for ( j=0; j<memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size; j+=sizeof( request_reply_mem_obj ) )
+	{
+		request_reply_mem_obj* obj = (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + j );
+		if ( obj->rq_size + obj->rsp_size )
+			ZEPTO_DEBUG_ASSERT( obj->ptr != 0 );
+	}
+	ZEPTO_DEBUG_ASSERT( j == memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+#endif
 
 	uint8_t first = 0, last = 0;
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	uint8_t* first_ptr = 0;
+	uint8_t* last_ptr = 0;
+	for ( i=0; i<MEMORY_HANDLE_MAX; i++ )
+		if ( memory_objects[i].ptr != 0 )
+		{
+			first = i;
+			last = i;
+			first_ptr = memory_objects[i].ptr;
+			last_ptr = memory_objects[i].ptr;
+			break;
+		}
+	if ( first_ptr == 0 )
+		for ( j=0; j<memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size; j+=sizeof( request_reply_mem_obj ) )
+		{
+			request_reply_mem_obj* obj = (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + j );
+			if ( obj->ptr != 0 )
+			{
+				first = MEMORY_HANDLE_ACQUIRABLE_START + j;
+				last = MEMORY_HANDLE_ACQUIRABLE_START + j;
+				first_ptr = obj->ptr;
+				last_ptr = obj->ptr;
+				break;
+			}
+		}
+
+	for ( i=0; i<MEMORY_HANDLE_MAX; i++ )
+	{
+		if ( memory_objects[i].ptr != 0 )
+		{
+			if ( memory_objects[ i ].ptr <= first_ptr )
+			{
+				first = i;
+				first_ptr = memory_objects[ i ].ptr;
+			}
+			if ( memory_objects[ i ].ptr >= last_ptr )
+			{
+				last = i;
+				last_ptr = memory_objects[ i ].ptr;
+			}
+		}
+	}
+	i = MEMORY_HANDLE_ACQUIRABLE_START;
+	for ( j=0; j<memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size; j+=sizeof( request_reply_mem_obj ), i++ )
+	{
+		request_reply_mem_obj* obj = (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + j );
+		if ( obj->ptr != 0 )
+		{
+			if ( obj->ptr <= first_ptr )
+			{
+				first = i;
+				first_ptr = obj->ptr;
+			}
+			if ( obj->ptr >= last_ptr )
+			{
+				last = i;
+				last_ptr = obj->ptr;
+			}
+		}
+	}
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	for ( i=0; i<MEMORY_HANDLE_MAX; i++ )
 		if ( memory_objects[i].ptr != 0 )
 		{
@@ -177,16 +339,30 @@ void zepto_mem_man_check_sanity()
 				last = i;
 		}
 	}
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 
-	ZEPTO_DEBUG_ASSERT( memory_objects[ first ].ptr > BASE_MEM_BLOCK );
-	uint8_t* right_end_of_free_space_at_left = memory_objects[ first ].ptr - 1;
+	request_reply_mem_obj* obj;
+	obj = MEMORY_OBJECT_PTR( first );
+{bool chk = obj->ptr > BASE_MEM_BLOCK;
+if ( !chk )
+{
+	chk = chk;
+}}
+	ZEPTO_DEBUG_ASSERT( obj->ptr > BASE_MEM_BLOCK );
+	uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
 	uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
-	ZEPTO_DEBUG_ASSERT( free_at_left == memory_objects[ first ].ptr - BASE_MEM_BLOCK );
+	ZEPTO_DEBUG_ASSERT( free_at_left == obj->ptr - BASE_MEM_BLOCK );
 
-	ZEPTO_DEBUG_ASSERT( memory_objects[ last ].ptr + memory_objects[ last ].rq_size + memory_objects[ last ].rsp_size < BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE );
-	uint8_t* left_end_of_free_space_at_right = memory_objects[ last ].ptr + memory_objects[ last ].rq_size + memory_objects[ last ].rsp_size;
+	obj = MEMORY_OBJECT_PTR( last );
+{bool chk = obj->ptr + obj->rq_size + obj->rsp_size < BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE;
+if ( !chk )
+{
+	chk = chk;
+}}
+	ZEPTO_DEBUG_ASSERT( obj->ptr + obj->rq_size + obj->rsp_size < BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE );
+	uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
 	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
-	ZEPTO_DEBUG_ASSERT( memory_objects[ last ].ptr + memory_objects[ last ].rq_size + memory_objects[ last ].rsp_size + free_at_right == BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE );
+	ZEPTO_DEBUG_ASSERT( obj->ptr + obj->rq_size + obj->rsp_size + free_at_right == BASE_MEM_BLOCK + BASE_MEM_BLOCK_SIZE );
 
 	uint16_t total_sz = free_at_left;
 
@@ -209,7 +385,28 @@ void zepto_mem_man_check_sanity()
 			ZEPTO_DEBUG_ASSERT( free_at_left == free_at_left_copy );
 		}
 	}
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	for ( j=0; j<memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size; j+=sizeof( request_reply_mem_obj ) )
+	{
+		request_reply_mem_obj* obj = (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + j );
+		if ( obj->ptr != 0 )
+		{
+			uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
+			uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
+			uint8_t* right_end_of_free_space_at_right = left_end_of_free_space_at_right + free_at_right - 1;
+			uint16_t free_at_right_copy = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right );
+			ZEPTO_DEBUG_ASSERT( free_at_right == free_at_right_copy );
 
+			total_sz += obj->rq_size + obj->rsp_size + free_at_right;
+
+			uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
+			uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
+			uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
+			uint16_t free_at_left_copy = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_left );
+			ZEPTO_DEBUG_ASSERT( free_at_left == free_at_left_copy );
+		}
+	}
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	ZEPTO_DEBUG_ASSERT( total_sz == BASE_MEM_BLOCK_SIZE );
 
 	zepto_mem_man_update_ever_reached();
@@ -231,56 +428,11 @@ void zepto_mem_man_init_memory_management()
 	uint8_t i;
 	for ( i=0; i<MEMORY_HANDLE_MAX; i++ )
 	{
-//		memset( &(memory_objects[i]), 0, sizeof( request_reply_mem_obj ) );
 		memory_objects[ i ].rq_size = 0;
 		memory_objects[ i ].rsp_size = 0;
 		memory_objects[ i ].ptr = BASE_MEM_BLOCK + 1 + i;
 		BASE_MEM_BLOCK[i] = 1;
 	}
-
-/*	BASE_MEM_BLOCK[0] = 1;
-	memory_objects[ MEMORY_HANDLE_MAIN_LOOP_1 ].ptr = BASE_MEM_BLOCK + 1;
-	memory_objects[ MEMORY_HANDLE_MAIN_LOOP_1 ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_MAIN_LOOP_1 ].rsp_size = 0;
-	BASE_MEM_BLOCK[1] = 1;
-	memory_objects[ MEMORY_HANDLE_MAIN_LOOP_2 ].ptr = BASE_MEM_BLOCK + 2;
-	memory_objects[ MEMORY_HANDLE_MAIN_LOOP_2 ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_MAIN_LOOP_2 ].rsp_size = 0;
-	BASE_MEM_BLOCK[2] = 1;
-	memory_objects[ MEMORY_HANDLE_SAGDP_LSM ].ptr = BASE_MEM_BLOCK + 3;
-	memory_objects[ MEMORY_HANDLE_SAGDP_LSM ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_SAGDP_LSM ].rsp_size = 0;
-	BASE_MEM_BLOCK[3] = 1;
-	memory_objects[ MEMORY_HANDLE_ADDITIONAL_ANSWER ].ptr = BASE_MEM_BLOCK + 4;
-	memory_objects[ MEMORY_HANDLE_ADDITIONAL_ANSWER ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_ADDITIONAL_ANSWER ].rsp_size = 0;
-#ifdef PLAIN_REPLY_FRAME
-#ifdef SA_DEBUG
-	BASE_MEM_BLOCK[4] = 1;
-	memory_objects[ MEMORY_HANDLE_TEST_SUPPORT ].ptr = BASE_MEM_BLOCK + 5;
-	memory_objects[ MEMORY_HANDLE_TEST_SUPPORT ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_TEST_SUPPORT ].rsp_size = 0;
-	BASE_MEM_BLOCK[5] = 1;
-	memory_objects[ MEMORY_HANDLE_DBG_TMP ].ptr = BASE_MEM_BLOCK + 6;
-	memory_objects[ MEMORY_HANDLE_DBG_TMP ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_DBG_TMP ].rsp_size = 0;
-#endif
-#else // PLAIN_REPLY_FRAME
-	BASE_MEM_BLOCK[4] = 1;
-	memory_objects[ MEMORY_HANDLE_DEFAULT_PLUGIN ].ptr = BASE_MEM_BLOCK + 5;
-	memory_objects[ MEMORY_HANDLE_DEFAULT_PLUGIN ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_DEFAULT_PLUGIN ].rsp_size = 0;
-#ifdef SA_DEBUG
-	BASE_MEM_BLOCK[5] = 1;
-	memory_objects[ MEMORY_HANDLE_TEST_SUPPORT ].ptr = BASE_MEM_BLOCK + 6;
-	memory_objects[ MEMORY_HANDLE_TEST_SUPPORT ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_TEST_SUPPORT ].rsp_size = 0;
-	BASE_MEM_BLOCK[6] = 1;
-	memory_objects[ MEMORY_HANDLE_DBG_TMP ].ptr = BASE_MEM_BLOCK + 7;
-	memory_objects[ MEMORY_HANDLE_DBG_TMP ].rq_size = 0;
-	memory_objects[ MEMORY_HANDLE_DBG_TMP ].rsp_size = 0;
-#endif
-#endif // PLAIN_REPLY_FRAME*/
 
 	uint16_t remains_at_right = BASE_MEM_BLOCK_SIZE - MEMORY_HANDLE_MAX;
 
@@ -292,15 +444,23 @@ void zepto_mem_man_init_memory_management()
 
 void zepto_mem_man_move_obj_max_right( REQUEST_REPLY_HANDLE mem_h )
 {
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR(  mem_h );
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( obj->ptr == 0 )
+	{
+		ZEPTO_DEBUG_ASSERT( mem_h > MEMORY_HANDLE_MAX );
+		return;
+	}
+#endif
 #ifdef _DEBUG
-	if ( memory_objects[ mem_h ].ptr == 0 )
+	if ( obj->ptr == 0 )
 	{
 		ZEPTO_DEBUG_PRINTF_2( "handle = %d: ptr == NULL\n", mem_h );
 	}
-	ZEPTO_DEBUG_ASSERT( memory_objects[ mem_h ].ptr != 0 );
+	ZEPTO_DEBUG_ASSERT( obj->ptr != 0 );
 #endif
 
-	uint8_t* left_end_of_free_space_at_right = memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
+	uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
 	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
 	ZEPTO_DEBUG_ASSERT( free_at_right >= 1 );
 	if ( free_at_right == 1 ) return;
@@ -308,23 +468,32 @@ void zepto_mem_man_move_obj_max_right( REQUEST_REPLY_HANDLE mem_h )
 
 	uint8_t* right_end_of_free_space_at_right = left_end_of_free_space_at_right + free_at_right - 1;
 
-	uint8_t* right_end_of_free_space_at_left = memory_objects[ mem_h ].ptr - 1;
+	uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
 	uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
 	uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
 
-	ZEPTO_MEMMOV( memory_objects[ mem_h ].ptr + move_sz, memory_objects[ mem_h ].ptr, memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size );
-	memory_objects[ mem_h ].ptr += move_sz;
+	ZEPTO_MEMMOV( obj->ptr + move_sz, obj->ptr, obj->rq_size + obj->rsp_size );
+	obj->ptr += move_sz;
 
 	*right_end_of_free_space_at_right = 1; // by construction we have left just 1 free byte (minimal allowed value);
 	zepto_mem_man_write_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_left, free_at_left + move_sz );
-	zepto_mem_man_write_encoded_uint16_no_size_checks_backward( memory_objects[ mem_h ].ptr - 1, free_at_left + move_sz );
+	zepto_mem_man_write_encoded_uint16_no_size_checks_backward( obj->ptr - 1, free_at_left + move_sz );
 }
 
 void zepto_mem_man_move_obj_max_left( REQUEST_REPLY_HANDLE mem_h )
 {
-	ZEPTO_DEBUG_ASSERT( memory_objects[ mem_h ].ptr != 0 );
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR(  mem_h );
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( obj->ptr == 0 )
+	{
+		ZEPTO_DEBUG_ASSERT( mem_h > MEMORY_HANDLE_MAX );
+		return;
+	}
+#else
+	ZEPTO_DEBUG_ASSERT( obj->ptr != 0 );
+#endif
 
-	uint8_t* right_end_of_free_space_at_left = memory_objects[ mem_h ].ptr - 1;
+	uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
 	uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
 	ZEPTO_DEBUG_ASSERT( free_at_left >= 1 );
 	if ( free_at_left == 1 ) return;
@@ -332,23 +501,32 @@ void zepto_mem_man_move_obj_max_left( REQUEST_REPLY_HANDLE mem_h )
 
 	uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
 
-	uint8_t* left_end_of_free_space_at_right = memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
+	uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
 	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
 	uint8_t* right_end_of_free_space_at_right = left_end_of_free_space_at_right + free_at_right - 1;
 
-	ZEPTO_MEMMOV( memory_objects[ mem_h ].ptr - move_sz, memory_objects[ mem_h ].ptr, memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size );
-	memory_objects[ mem_h ].ptr -= move_sz;
+	ZEPTO_MEMMOV( obj->ptr - move_sz, obj->ptr, obj->rq_size + obj->rsp_size );
+	obj->ptr -= move_sz;
 
 	*left_end_of_free_space_at_left = 1; // by construction we have left just 1 free byte (minimal allowed value);
 	zepto_mem_man_write_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right, free_at_right + move_sz );
-	zepto_mem_man_write_encoded_uint16_no_size_checks_forward( memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size, free_at_right + move_sz );
+	zepto_mem_man_write_encoded_uint16_no_size_checks_forward( obj->ptr + obj->rq_size + obj->rsp_size, free_at_right + move_sz );
 zepto_mem_man_check_sanity();
 }
 
 uint16_t zepto_mem_man_get_freeable_size_at_right( REQUEST_REPLY_HANDLE mem_h )
 {
-	ZEPTO_DEBUG_ASSERT( memory_objects[ mem_h ].ptr != 0 );
-	uint8_t* left_end_of_free_space_at_right = memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR(  mem_h );
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( obj->ptr == 0 )
+	{
+		ZEPTO_DEBUG_ASSERT( mem_h > MEMORY_HANDLE_MAX );
+		return 0;
+	}
+#else
+	ZEPTO_DEBUG_ASSERT( obj->ptr != 0 );
+#endif
+	uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
 	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
 	ZEPTO_DEBUG_ASSERT( free_at_right >= 1 );
 	return free_at_right - 1;
@@ -356,8 +534,17 @@ uint16_t zepto_mem_man_get_freeable_size_at_right( REQUEST_REPLY_HANDLE mem_h )
 
 uint16_t zepto_mem_man_get_freeable_size_at_left( REQUEST_REPLY_HANDLE mem_h )
 {
-	ZEPTO_DEBUG_ASSERT( memory_objects[ mem_h ].ptr != 0 );
-	uint8_t* right_end_of_free_space_at_left = memory_objects[ mem_h ].ptr - 1;
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR(  mem_h );
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( obj->ptr == 0 )
+	{
+		ZEPTO_DEBUG_ASSERT( mem_h > MEMORY_HANDLE_MAX );
+		return 0;
+	}
+#else
+	ZEPTO_DEBUG_ASSERT( obj->ptr != 0 );
+#endif
+	uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
 	uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
 	ZEPTO_DEBUG_ASSERT( free_at_left >= 1 );
 	return free_at_left - 1;
@@ -366,12 +553,47 @@ uint16_t zepto_mem_man_get_freeable_size_at_left( REQUEST_REPLY_HANDLE mem_h )
 #ifdef MEM_MNGMT_ORDERED_HANDLES
 REQUEST_REPLY_HANDLE zepto_mem_man_get_next_block( REQUEST_REPLY_HANDLE mem_h )
 {
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( (mem_h + 1) < MEMORY_HANDLE_MAX) return mem_h + 1;
+	// now we're to select a candidate from allocated handles
+	REQUEST_REPLY_HANDLE inner = 0;
+	request_reply_mem_obj* obj = (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr );
+	uint8_t* end = memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size;
+	do
+	{
+		if ( obj->ptr )
+			return MEMORY_HANDLE_ACQUIRABLE_START + inner;
+		inner++;
+		obj++;
+	} 
+	while ( (uint8_t*)obj < end );
+	return MEMORY_HANDLE_INVALID;
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	return (mem_h + 1) < MEMORY_HANDLE_MAX ? mem_h + 1 : MEMORY_HANDLE_INVALID;
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 }
 
 REQUEST_REPLY_HANDLE zepto_mem_man_get_prev_block( REQUEST_REPLY_HANDLE mem_h )
 {
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( mem_h == 0 || mem_h == MEMORY_HANDLE_INVALID ) return MEMORY_HANDLE_INVALID;
+	if ( mem_h < MEMORY_HANDLE_MAX ) return mem_h - 1;
+	REQUEST_REPLY_HANDLE inner = mem_h - MEMORY_HANDLE_ACQUIRABLE_START;
+	if ( inner == 0 )
+		return MEMORY_HANDLE_MAX - 1;
+	if ( (uint8_t*)((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr) + inner ) >= memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size )
+		return MEMORY_HANDLE_INVALID;
+	do
+	{
+		inner--;
+		if ( ((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr))[inner].ptr )
+			return MEMORY_HANDLE_ACQUIRABLE_START + inner;
+	} 
+	while ( inner );
+	return MEMORY_HANDLE_MAX - 1;
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	return (mem_h > 0 ) ? mem_h - 1 : MEMORY_HANDLE_INVALID ;
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 }
 
 void zepto_mem_man_move_all_right( REQUEST_REPLY_HANDLE h_right, REQUEST_REPLY_HANDLE h_left )
@@ -391,7 +613,11 @@ void zepto_mem_man_move_all_left( REQUEST_REPLY_HANDLE h_left, REQUEST_REPLY_HAN
 {
 	ZEPTO_DEBUG_ASSERT( h_right !=  MEMORY_HANDLE_INVALID );
 	ZEPTO_DEBUG_ASSERT( h_left !=  MEMORY_HANDLE_INVALID );
-	ZEPTO_DEBUG_ASSERT( memory_objects[h_left].ptr <= memory_objects[h_right].ptr );
+#ifdef SA_DEBUG
+	request_reply_mem_obj* LEFT_OBJ = MEMORY_OBJECT_PTR( h_left );
+	request_reply_mem_obj* RIGHT_OBJ = MEMORY_OBJECT_PTR( h_right );
+	ZEPTO_DEBUG_ASSERT( LEFT_OBJ->ptr <= RIGHT_OBJ->ptr );
+#endif
 	REQUEST_REPLY_HANDLE h_iter;
 	for ( h_iter = h_left; h_iter < h_right; h_iter++ )
 	{
@@ -409,6 +635,21 @@ uint16_t zepto_mem_man_get_total_freeable_space_at_right( REQUEST_REPLY_HANDLE m
 		free_at_right += zepto_mem_man_get_freeable_size_at_right( h_iter );
 		h_iter++;
 	}
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	h_iter = MEMORY_HANDLE_ACQUIRABLE_START;
+	request_reply_mem_obj* obj = (request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr );
+	uint8_t* end = memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size;
+	while ( free_at_right < desired_size && (uint8_t*)obj < end )
+	{
+		if ( obj->ptr )
+		{
+			*h_very_right = h_iter;
+			free_at_right += zepto_mem_man_get_freeable_size_at_right( h_iter );
+		}
+		obj++;
+		h_iter++;
+	}
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	return free_at_right;
 }
 
@@ -416,6 +657,25 @@ uint16_t zepto_mem_man_get_total_freeable_space_at_left( REQUEST_REPLY_HANDLE me
 {
 	REQUEST_REPLY_HANDLE h_iter = mem_h;
 	uint16_t free_at_left = 0;
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( h_iter >= MEMORY_HANDLE_ACQUIRABLE_START )
+	{
+		request_reply_mem_obj* obj = ((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr )) + h_iter - MEMORY_HANDLE_ACQUIRABLE_START;
+		ZEPTO_DEBUG_ASSERT( (uint8_t*)obj < memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+		do
+		{
+			if ( obj->ptr )
+			{
+				*h_very_left = h_iter;
+				free_at_left += zepto_mem_man_get_freeable_size_at_left( h_iter );
+			}
+			h_iter--;
+			obj--;
+		}
+		while ( h_iter >= MEMORY_HANDLE_ACQUIRABLE_START );
+		h_iter = MEMORY_HANDLE_MAX - 1;
+	}
+#endif
 	while ( free_at_left < desired_size )
 	{
 		*h_very_left = h_iter;
@@ -427,6 +687,9 @@ uint16_t zepto_mem_man_get_total_freeable_space_at_left( REQUEST_REPLY_HANDLE me
 }
 
 #else // MEM_MNGMT_ORDERED_HANDLES
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#error REVISION REQUIRED
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 
 REQUEST_REPLY_HANDLE zepto_mem_man_get_next_block( REQUEST_REPLY_HANDLE mem_h )
 {
@@ -542,33 +805,104 @@ uint16_t zepto_mem_man_get_total_freeable_space_at_left( REQUEST_REPLY_HANDLE me
 
 uint8_t* memory_object_get_request_ptr( REQUEST_REPLY_HANDLE mem_h )
 {
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( mem_h < MEMORY_HANDLE_MAX )
+		return memory_objects[ mem_h ].ptr;
+	else
+	{
+		request_reply_mem_obj* obj = ((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr )) + mem_h - MEMORY_HANDLE_ACQUIRABLE_START;
+		ZEPTO_DEBUG_ASSERT( (uint8_t*)obj < memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+		ZEPTO_DEBUG_ASSERT( obj->ptr ); // allocated
+		return obj->ptr;
+	}
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	ZEPTO_DEBUG_ASSERT( mem_h < MEMORY_HANDLE_MAX );
 	return memory_objects[ mem_h ].ptr;
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 }
 
 uint16_t memory_object_get_request_size( REQUEST_REPLY_HANDLE mem_h )
 {
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( mem_h < MEMORY_HANDLE_MAX )
+		return memory_objects[ mem_h ].rq_size;
+	else
+	{
+		request_reply_mem_obj* obj = ((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr )) + mem_h - MEMORY_HANDLE_ACQUIRABLE_START;
+		ZEPTO_DEBUG_ASSERT( (uint8_t*)obj < memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+		ZEPTO_DEBUG_ASSERT( obj->ptr ); // allocated
+		return obj->rq_size;
+	}
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	ZEPTO_DEBUG_ASSERT( mem_h < MEMORY_HANDLE_MAX );
 	return memory_objects[ mem_h ].rq_size;
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 }
-
-uint8_t* memory_object_get_response_ptr( REQUEST_REPLY_HANDLE mem_h )
+/*
+uint8_t memory_object_read_request_byte( REQUEST_REPLY_HANDLE mem_h, uint16_t offset )
 {
 	ZEPTO_DEBUG_ASSERT( mem_h < MEMORY_HANDLE_MAX );
+	ZEPTO_DEBUG_ASSERT( offset < memory_objects[ mem_h ].rq_size );
+	return *(memory_objects[ mem_h ].ptr + offset);
+}
+*/
+uint8_t* memory_object_get_response_ptr( REQUEST_REPLY_HANDLE mem_h )
+{
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( mem_h < MEMORY_HANDLE_MAX )
+		return memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size;
+	else
+	{
+		request_reply_mem_obj* obj = ((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr )) + mem_h - MEMORY_HANDLE_ACQUIRABLE_START;
+		ZEPTO_DEBUG_ASSERT( (uint8_t*)obj < memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+		ZEPTO_DEBUG_ASSERT( obj->ptr ); // allocated
+		return obj->ptr + obj->rq_size;
+	}
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	ZEPTO_DEBUG_ASSERT( mem_h < MEMORY_HANDLE_MAX );
 	return memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size;
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 }
 
 uint16_t memory_object_get_response_size( REQUEST_REPLY_HANDLE mem_h )
 {
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( mem_h < MEMORY_HANDLE_MAX )
+		return memory_objects[ mem_h ].rsp_size;
+	else
+	{
+		request_reply_mem_obj* obj = ((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr )) + mem_h - MEMORY_HANDLE_ACQUIRABLE_START;
+		ZEPTO_DEBUG_ASSERT( (uint8_t*)obj < memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+		ZEPTO_DEBUG_ASSERT( obj->ptr ); // allocated
+		return obj->rsp_size;
+	}
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	ZEPTO_DEBUG_ASSERT( mem_h < MEMORY_HANDLE_MAX );
 	return memory_objects[ mem_h ].rsp_size;
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 }
 
 uint8_t memory_object_read_response_byte( REQUEST_REPLY_HANDLE mem_h, uint16_t offset )
 {
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+	if ( mem_h < MEMORY_HANDLE_MAX )
+	{
+		ZEPTO_DEBUG_ASSERT( offset < memory_objects[ mem_h ].rsp_size );
+		return *(memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + offset);
+	}
+	else
+	{
+		request_reply_mem_obj* obj = ((request_reply_mem_obj*)( memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr )) + mem_h - MEMORY_HANDLE_ACQUIRABLE_START;
+		ZEPTO_DEBUG_ASSERT( (uint8_t*)obj < memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size );
+		ZEPTO_DEBUG_ASSERT( obj->ptr ); // allocated
+		ZEPTO_DEBUG_ASSERT( offset < obj->rsp_size );
+		return *(obj->ptr + obj->rq_size + offset);
+	}
+#else // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 	ZEPTO_DEBUG_ASSERT( mem_h < MEMORY_HANDLE_MAX );
 	ZEPTO_DEBUG_ASSERT( offset < memory_objects[ mem_h ].rsp_size );
 	return *(memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + offset);
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 }
 
 
@@ -586,7 +920,8 @@ uint8_t* zepto_mem_man_try_expand_right( REQUEST_REPLY_HANDLE mem_h, uint16_t si
 // if successful, updates memory_objects[ mem_h ].rsp_size -> memory_objects[ mem_h ].rsp_size + size and returns ptr to added part (that is, memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + (former value of 'memory_objects[ mem_h ].rsp_size') )
 // if fails, returns NULL
 {
-	uint8_t* left_end_of_free_space_at_right = memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
 	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
 	if ( size >= free_at_right ) return NULL;
 	uint8_t* right_end_of_free_space_at_right = left_end_of_free_space_at_right + free_at_right - 1;
@@ -597,8 +932,8 @@ uint8_t* zepto_mem_man_try_expand_right( REQUEST_REPLY_HANDLE mem_h, uint16_t si
 	zepto_mem_man_write_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right, free_at_right );
 	zepto_mem_man_write_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right, free_at_right );
 
-	uint8_t* ret = memory_objects[ mem_h ].ptr + memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
-	memory_objects[ mem_h ].rsp_size += size;
+	uint8_t* ret = obj->ptr + obj->rq_size + obj->rsp_size;
+	obj->rsp_size += size;
 	return ret;
 }
 
@@ -611,9 +946,10 @@ bool zepto_mem_man_try_expand_left( REQUEST_REPLY_HANDLE mem_h, uint16_t size )
 //    - returns false
 // NOTE: as prepending is applicable only to response, memory_objects[ mem_h ].rq_size must be set to 0 (with respective other changes) before this call
 {
-	ZEPTO_DEBUG_ASSERT( memory_objects[ mem_h ].rq_size == 0 );
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	ZEPTO_DEBUG_ASSERT( obj->rq_size == 0 );
 
-	uint8_t* right_end_of_free_space_at_left = memory_objects[ mem_h ].ptr - 1;
+	uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
 	uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
 	if ( size >= free_at_left ) return false;
 	uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
@@ -624,8 +960,8 @@ bool zepto_mem_man_try_expand_left( REQUEST_REPLY_HANDLE mem_h, uint16_t size )
 	zepto_mem_man_write_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_left, free_at_left );
 	zepto_mem_man_write_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left, free_at_left );
 
-	memory_objects[ mem_h ].ptr -= size;
-	memory_objects[ mem_h ].rsp_size += size;
+	obj->ptr -= size;
+	obj->rsp_size += size;
 	return true;
 }
 
@@ -674,8 +1010,6 @@ uint8_t* memory_object_append( REQUEST_REPLY_HANDLE mem_h, uint16_t size )
 {
 zepto_mem_man_check_sanity();
 	uint8_t* ret;
-	if (size == 128)
-		size = size;
 
 	ret = zepto_mem_man_try_expand_right( mem_h, size );
 zepto_mem_man_check_sanity();
@@ -733,19 +1067,20 @@ zepto_mem_man_check_sanity();
 uint8_t* memory_object_prepend( REQUEST_REPLY_HANDLE mem_h, uint16_t size )
 {
 zepto_mem_man_check_sanity();
-	if ( memory_objects[ mem_h ].rq_size )
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	if ( obj->rq_size )
 	{
-		uint8_t* right_end_of_free_space_at_left = memory_objects[ mem_h ].ptr - 1;
+		uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
 		uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
 		uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
 
-		right_end_of_free_space_at_left += memory_objects[ mem_h ].rq_size;
-		free_at_left += memory_objects[ mem_h ].rq_size;
+		right_end_of_free_space_at_left += obj->rq_size;
+		free_at_left += obj->rq_size;
 		zepto_mem_man_write_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_left, free_at_left );
 		zepto_mem_man_write_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left, free_at_left );
 
-		memory_objects[ mem_h ].ptr += memory_objects[ mem_h ].rq_size;
-		memory_objects[ mem_h ].rq_size = 0;
+		obj->ptr += obj->rq_size;
+		obj->rq_size = 0;
 	}
 zepto_mem_man_check_sanity();
 	bool ret;
@@ -754,9 +1089,9 @@ zepto_mem_man_check_sanity();
 zepto_mem_man_check_sanity();
 	if ( ret )
 	{
-//		ZEPTO_MEMCPY( memory_objects[ mem_h ].ptr, buff, size );
+//		ZEPTO_MEMCPY( obj->ptr, buff, size );
 zepto_mem_man_check_sanity();
-		return memory_objects[ mem_h ].ptr;
+		return obj->ptr;
 //		return;
 	}
 
@@ -764,9 +1099,9 @@ zepto_mem_man_check_sanity();
 zepto_mem_man_check_sanity();
 	if ( ret )
 	{
-//		ZEPTO_MEMCPY( memory_objects[ mem_h ].ptr, buff, size );
+//		ZEPTO_MEMCPY( obj->ptr, buff, size );
 zepto_mem_man_check_sanity();
-		return memory_objects[ mem_h ].ptr;
+		return obj->ptr;
 //		return;
 	}
 
@@ -780,9 +1115,9 @@ zepto_mem_man_check_sanity();
 		ret = zepto_mem_man_try_move_right_expand_left( mem_h, size );
 zepto_mem_man_check_sanity();
 		ZEPTO_DEBUG_ASSERT( ret );
-//		ZEPTO_MEMCPY( memory_objects[ mem_h ].ptr, buff, size );
+//		ZEPTO_MEMCPY( obj->ptr, buff, size );
 zepto_mem_man_check_sanity();
-		return memory_objects[ mem_h ].ptr;
+		return obj->ptr;
 //		return;
 	}
 
@@ -796,9 +1131,9 @@ zepto_mem_man_check_sanity();
 		ret = zepto_mem_man_try_move_right_expand_left( mem_h, size );
 zepto_mem_man_check_sanity();
 		ZEPTO_DEBUG_ASSERT( ret ); // TODO: yet to be considered: forced truncation and further error handling
-//		ZEPTO_MEMCPY( memory_objects[ mem_h ].ptr, buff, size );
+//		ZEPTO_MEMCPY( obj->ptr, buff, size );
 zepto_mem_man_check_sanity();
-		return memory_objects[ mem_h ].ptr;
+		return obj->ptr;
 //		return;
 	}
 	else
@@ -969,14 +1304,15 @@ void memory_block_trim_at_left( uint8_t* block, uint16_t ini_sz, uint16_t size_t
 
 void memory_object_cut_and_make_response( REQUEST_REPLY_HANDLE mem_h, uint16_t offset, uint16_t size )
 {
-	ZEPTO_DEBUG_ASSERT( offset <= memory_objects[ mem_h ].rq_size );
-	ZEPTO_DEBUG_ASSERT( offset + size <= memory_objects[ mem_h ].rq_size );
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	ZEPTO_DEBUG_ASSERT( offset <= obj->rq_size );
+	ZEPTO_DEBUG_ASSERT( offset + size <= obj->rq_size );
 
-	uint8_t* ini_block = memory_objects[ mem_h ].ptr;
-	uint16_t ini_sz = memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
-	memory_objects[ mem_h ].ptr += offset;
-	memory_objects[ mem_h ].rq_size = 0;
-	memory_objects[ mem_h ].rsp_size = size;
+	uint8_t* ini_block = obj->ptr;
+	uint16_t ini_sz = obj->rq_size + obj->rsp_size;
+	obj->ptr += offset;
+	obj->rq_size = 0;
+	obj->rsp_size = size;
 	memory_block_trim_at_left( ini_block, ini_sz, offset );
 	memory_block_trim_at_right( ini_block + offset, ini_sz - offset, ini_sz - offset - size );
 
@@ -985,18 +1321,19 @@ zepto_mem_man_check_sanity();
 
 void memory_object_request_to_response( REQUEST_REPLY_HANDLE mem_h )
 {
-	memory_object_cut_and_make_response( mem_h, 0, memory_objects[ mem_h ].rq_size );
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	memory_object_cut_and_make_response( mem_h, 0, obj->rq_size );
 }
 
 void memory_object_response_to_request( REQUEST_REPLY_HANDLE mem_h )
 {
-zepto_mem_man_check_sanity();
-	uint8_t* ini_block = memory_objects[ mem_h ].ptr;
-	uint16_t ini_sz = memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
-	uint16_t trimmed_sz = memory_objects[ mem_h ].rq_size;
-	memory_objects[ mem_h ].ptr += trimmed_sz;
-	memory_objects[ mem_h ].rq_size = memory_objects[ mem_h ].rsp_size;
-	memory_objects[ mem_h ].rsp_size = 0;
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	uint8_t* ini_block = obj->ptr;
+	uint16_t ini_sz = obj->rq_size + obj->rsp_size;
+	uint16_t trimmed_sz = obj->rq_size;
+	obj->ptr += trimmed_sz;
+	obj->rq_size = obj->rsp_size;
+	obj->rsp_size = 0;
 	memory_block_trim_at_left( ini_block, ini_sz, trimmed_sz );
 
 zepto_mem_man_check_sanity();
@@ -1004,10 +1341,11 @@ zepto_mem_man_check_sanity();
 
 void memory_object_free( REQUEST_REPLY_HANDLE mem_h )
 {
-	uint8_t* ini_block = memory_objects[ mem_h ].ptr;
-	uint16_t ini_sz = memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
-	memory_objects[ mem_h ].rq_size = 0;
-	memory_objects[ mem_h ].rsp_size = 0;
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	uint8_t* ini_block = obj->ptr;
+	uint16_t ini_sz = obj->rq_size + obj->rsp_size;
+	obj->rq_size = 0;
+	obj->rsp_size = 0;
 	memory_block_trim_at_right( ini_block, ini_sz, ini_sz );
 
 zepto_mem_man_check_sanity();
@@ -1015,10 +1353,11 @@ zepto_mem_man_check_sanity();
 
 void memory_object_free_response( REQUEST_REPLY_HANDLE mem_h )
 {
-	uint8_t* ini_block = memory_objects[ mem_h ].ptr;
-	uint16_t ini_sz = memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
-	uint16_t trimmed_sz = memory_objects[ mem_h ].rsp_size;
-	memory_objects[ mem_h ].rsp_size = 0;
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	uint8_t* ini_block = obj->ptr;
+	uint16_t ini_sz = obj->rq_size + obj->rsp_size;
+	uint16_t trimmed_sz = obj->rsp_size;
+	obj->rsp_size = 0;
 	memory_block_trim_at_right( ini_block, ini_sz, trimmed_sz );
 
 zepto_mem_man_check_sanity();
@@ -1026,16 +1365,217 @@ zepto_mem_man_check_sanity();
 
 void memory_object_strip_beginning_of_request( REQUEST_REPLY_HANDLE mem_h, uint16_t freeing_at_left )
 {
-	ZEPTO_DEBUG_ASSERT( freeing_at_left <= memory_objects[ mem_h ].rq_size );
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	ZEPTO_DEBUG_ASSERT( freeing_at_left <= obj->rq_size );
 
-	uint8_t* ini_block = memory_objects[ mem_h ].ptr;
-	uint16_t ini_sz = memory_objects[ mem_h ].rq_size + memory_objects[ mem_h ].rsp_size;
-	memory_objects[ mem_h ].ptr += freeing_at_left;
-	memory_objects[ mem_h ].rq_size -= freeing_at_left;
+	uint8_t* ini_block = obj->ptr;
+	uint16_t ini_sz = obj->rq_size + obj->rsp_size;
+	obj->ptr += freeing_at_left;
+	obj->rq_size -= freeing_at_left;
 	memory_block_trim_at_left( ini_block, ini_sz, freeing_at_left );
 
 zepto_mem_man_check_sanity();
 }
+
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+
+REQUEST_REPLY_HANDLE memory_object_acquire()
+{
+	uint8_t* base_buff = memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr;
+	uint16_t base_buff_sz = memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size;
+	request_reply_mem_obj* obj;
+	request_reply_mem_obj* prev_obj;
+	REQUEST_REPLY_HANDLE prev;
+//	REQUEST_REPLY_HANDLE current;
+
+	// 1. create (find an empty slot, if exists; or add a new one) object
+	zepto_mem_man_check_sanity();
+#ifdef SA_DEBUG
+	skip_sanity_check = true;
+#endif
+	if ( base_buff_sz == 0 ) // no object is yet allocated
+	{
+		base_buff = memory_object_append( MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE, sizeof(request_reply_mem_obj) );
+		obj = (request_reply_mem_obj*)base_buff;
+		obj->ptr = NULL;
+		prev = MEMORY_HANDLE_ACQUIRABLE_START - 1;
+//		current = 0;
+		prev_obj = memory_objects + MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE;
+	}
+	else
+	{
+		obj = (request_reply_mem_obj*)base_buff;
+		if ( obj->ptr == NULL )
+		{
+			prev = MEMORY_HANDLE_ACQUIRABLE_START - 1;
+//			current = MEMORY_HANDLE_ACQUIRABLE_START;
+			prev_obj = memory_objects + MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE;
+		}
+		else
+		{
+//			prev = 0;
+//			current = 1;
+//			prev_obj = obj;
+			obj++;
+			while ( (uint8_t*)(obj) < base_buff + base_buff_sz && obj->ptr != NULL )
+			{
+//				prev++;
+				obj++;
+			}
+			// now, a previous obj is allocated, nad we can potentially be outside
+			if ( (uint8_t*)obj >= base_buff + base_buff_sz )
+			{
+				ZEPTO_DEBUG_ASSERT( (uint8_t*)obj == base_buff + base_buff_sz );
+#ifdef SA_DEBUG
+	skip_sanity_check = true;
+#endif
+				obj = (request_reply_mem_obj*)( memory_object_append( MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE, sizeof(request_reply_mem_obj) ) );
+				base_buff = memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr; // could have potentially been changed
+				obj->ptr = NULL;
+			}
+			prev_obj = obj - 1;
+			prev = prev_obj - (request_reply_mem_obj*)(base_buff) + MEMORY_HANDLE_ACQUIRABLE_START;
+			obj->ptr = NULL;
+		}
+	}
+	obj->rq_size = 0;
+	obj->rsp_size = 0;
+#ifdef SA_DEBUG
+	skip_sanity_check = false;
+	zepto_mem_man_check_sanity();
+	skip_sanity_check = true;
+#endif
+
+	// 2. create object in data space (need to insert an empty object after a pevious one)
+	uint8_t* left_end_of_free_space_at_right = prev_obj->ptr + prev_obj->rq_size + prev_obj->rsp_size;
+	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
+	ZEPTO_DEBUG_ASSERT( free_at_right >= 1 );
+	if ( free_at_right > 1 )
+	{
+		uint8_t* right_end_of_free_space_at_right = left_end_of_free_space_at_right + free_at_right - 1;
+		uint16_t free_at_right_copy = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right );
+		ZEPTO_DEBUG_ASSERT( free_at_right == free_at_right_copy );
+
+		*left_end_of_free_space_at_right = 1;
+		left_end_of_free_space_at_right++;
+		free_at_right--;
+		zepto_mem_man_write_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right, free_at_right );
+		zepto_mem_man_write_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right, free_at_right );
+
+		obj->ptr = left_end_of_free_space_at_right;
+	}
+	else
+	{
+		uint8_t* right_end_of_free_space_at_left = prev_obj->ptr - 1;
+		uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
+		if ( free_at_left > 1 )
+		{
+			uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
+			(prev_obj->ptr)--;
+			ZEPTO_MEMMOV( prev_obj->ptr, prev_obj->ptr+1, prev_obj->rq_size + prev_obj->rsp_size );
+			right_end_of_free_space_at_left--;
+			free_at_left--;
+			zepto_mem_man_write_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_left, free_at_left );
+			zepto_mem_man_write_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left, free_at_left );
+			left_end_of_free_space_at_right--;
+			*left_end_of_free_space_at_right = 1;
+			obj->ptr = left_end_of_free_space_at_right + 1;
+		}
+		else // now we are to apply a lot of efforts to move objects and to get that necessary 1 byte of free space
+		{
+#ifdef SA_DEBUG
+			uint16_t prev_obj_resp_size = prev_obj->rsp_size;
+#endif
+			uint8_t* prev_obj_buff = memory_object_append( prev, 1 );
+			if ( prev_obj_buff == NULL ) // failed to move; no space for a new object
+			{
+				ZEPTO_DEBUG_ASSERT( obj->ptr == NULL );
+				return MEMORY_HANDLE_INVALID;
+			}
+			// if prev_obj has been dyn allocated, its position mignt be changed after this move
+			if ( prev_obj != memory_objects + MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE )
+			{
+				base_buff = memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr;
+			}
+			prev_obj = (request_reply_mem_obj*)(base_buff) + prev - MEMORY_HANDLE_ACQUIRABLE_START;
+#ifdef SA_DEBUG
+			ZEPTO_DEBUG_ASSERT( prev_obj_resp_size + 1 == prev_obj->rsp_size ); // we just check our expectations of memory_object_append() which moves somehow and increases rsp_size respectively
+#endif
+			// now we will manually do the rest of the job
+			(prev_obj->rsp_size)--;
+//			uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
+			left_end_of_free_space_at_right = prev_obj->ptr + prev_obj->rq_size + prev_obj->rsp_size;
+			*left_end_of_free_space_at_right = 1;
+			obj->ptr = left_end_of_free_space_at_right + 1;
+		}
+	}
+
+	// 3. return acquired handle
+#ifdef SA_DEBUG
+	skip_sanity_check = false;
+#endif
+	zepto_mem_man_check_sanity();
+	ZEPTO_DEBUG_ASSERT( obj->ptr != NULL );
+	return obj - (request_reply_mem_obj*)(base_buff) + MEMORY_HANDLE_ACQUIRABLE_START;
+}
+
+void memory_object_release( REQUEST_REPLY_HANDLE mem_h )
+{
+	zepto_mem_man_check_sanity();
+	ASSERT_MEMORY_HANDLE_VALID( mem_h );
+	ZEPTO_DEBUG_ASSERT( mem_h >= MEMORY_HANDLE_ACQUIRABLE_START );
+	uint8_t* base_buff = memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].ptr;
+	uint16_t base_buff_sz = memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rq_size + memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size;
+	request_reply_mem_obj* start = (request_reply_mem_obj*)base_buff;
+	request_reply_mem_obj* obj = start + mem_h - MEMORY_HANDLE_ACQUIRABLE_START;
+	ZEPTO_DEBUG_ASSERT( (uint8_t*)(obj+1) <= base_buff + base_buff_sz );
+	ZEPTO_DEBUG_ASSERT( obj->ptr != NULL ); // indeed, allocated
+
+	// 1. remove object data
+	uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
+	uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
+	uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
+	uint16_t free_at_left_copy = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_left );
+	ZEPTO_DEBUG_ASSERT( free_at_left == free_at_left_copy );
+	ZEPTO_DEBUG_ASSERT( free_at_left >= 1 );
+
+	uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
+	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
+	uint8_t* right_end_of_free_space_at_right = left_end_of_free_space_at_right + free_at_right - 1;
+	uint16_t free_at_right_copy = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right );
+	ZEPTO_DEBUG_ASSERT( free_at_right == free_at_right_copy );
+	ZEPTO_DEBUG_ASSERT( free_at_right >= 1 );
+
+	uint16_t free_sz_after_release = free_at_left + obj->rq_size + obj->rsp_size + free_at_right;
+
+	zepto_mem_man_write_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_left, free_sz_after_release );
+	zepto_mem_man_write_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right, free_sz_after_release );
+
+	// 2. mark object as released
+	obj->ptr = NULL;
+	obj->rq_size = 0;
+	obj->rsp_size = 0;
+	zepto_mem_man_check_sanity();
+
+	// 3. release memory of object storage, if possible
+	if ( (uint8_t*)(obj+1) == base_buff + base_buff_sz ) // the last
+	{
+		request_reply_mem_obj* erase_start = obj;
+		while ( obj != start && obj->ptr == NULL ) 
+		{
+			if ( (obj-1)->ptr != NULL )
+				break;
+			obj--;
+		}
+		uint16_t sz_to_drop = base_buff + base_buff_sz - (uint8_t*)obj;
+		memory_block_trim_at_right( base_buff, base_buff_sz, sz_to_drop );
+		memory_objects[MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE].rsp_size -= sz_to_drop;
+	}
+	zepto_mem_man_check_sanity();
+}
+
+#endif
+
 
 #endif // MEM_MNGMT_OLD_APPROACH
 
@@ -1049,21 +1589,24 @@ zepto_mem_man_check_sanity();
 
 void zepto_parser_init( parser_obj* po, REQUEST_REPLY_HANDLE mem_h )
 {
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	po->mem_handle = mem_h;
 	po->offset = 0;
 }
 
 void zepto_parser_init_by_parser( parser_obj* po, const parser_obj* po_base )
 {
-	ZEPTO_DEBUG_ASSERT( po_base->mem_handle != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( po_base->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po_base->mem_handle != MEMORY_HANDLE_INVALID );
 	po->mem_handle = po_base->mem_handle;
 	po->offset = po_base->offset;
 }
 
 uint8_t zepto_parse_uint8( parser_obj* po )
 {
-	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( po->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
 	uint8_t* buff = memory_object_get_request_ptr( po->mem_handle ) + po->offset;
 	ZEPTO_DEBUG_ASSERT( buff != NULL );
 	uint8_t ret = buff[ 0 ];
@@ -1106,7 +1649,8 @@ ZEPTO_DEBUG_PRINTF_2( "zepto_parse_encoded_uint16(): ini offset = %d...", po->of
 */
 bool zepto_parse_read_block( parser_obj* po, uint8_t* block, uint16_t size )
 {
-	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( po->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
 	if ( po->offset + size > memory_object_get_request_size( po->mem_handle ) )
 		return false;
 	uint8_t* buff = memory_object_get_request_ptr( po->mem_handle ) + po->offset;
@@ -1118,7 +1662,8 @@ bool zepto_parse_read_block( parser_obj* po, uint8_t* block, uint16_t size )
 
 bool zepto_parse_skip_block( parser_obj* po, uint16_t size )
 {
-	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( po->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
 	if ( po->offset + size > memory_object_get_request_size( po->mem_handle ) )
 		return false;
 	(po->offset) += size;
@@ -1127,13 +1672,15 @@ bool zepto_parse_skip_block( parser_obj* po, uint16_t size )
 
 bool zepto_is_parsing_done( parser_obj* po )
 {
-	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( po->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
 	return po->offset >= memory_object_get_request_size( po->mem_handle );
 }
 
 uint16_t zepto_parsing_remaining_bytes( parser_obj* po )
 {
-	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( po->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
 if ( !(po->offset <= memory_object_get_request_size( po->mem_handle ) ) )
 {
 	ZEPTO_DEBUG_PRINTF_4( "zepto_parsing_remaining_bytes(): mem_h = %d, offset = %d, rq_sz = %d\n", po->mem_handle, po->offset, memory_object_get_request_size( po->mem_handle ) );
@@ -1146,7 +1693,8 @@ if ( !(po->offset <= memory_object_get_request_size( po->mem_handle ) ) )
 
 void zepto_write_uint8( REQUEST_REPLY_HANDLE mem_h, uint8_t val )
 {
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	uint8_t* buff = memory_object_append( mem_h, 1 );
 	ZEPTO_DEBUG_ASSERT( buff != NULL );
 	buff[0] = val;
@@ -1183,7 +1731,8 @@ ZEPTO_DEBUG_PRINTF_2( "zepto_write_encoded_uint16( %x )\n", num );
 */
 void zepto_write_block( REQUEST_REPLY_HANDLE mem_h, const uint8_t* block, uint16_t size )
 {
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	uint8_t* buff = memory_object_append( mem_h, size );
 	ZEPTO_MEMCPY( buff, block, size );
 }
@@ -1195,7 +1744,8 @@ void zepto_response_to_request( MEMORY_HANDLE mem_h )
 
 void zepto_convert_part_of_request_to_response( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end )
 {
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == mem_h );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == po_end->mem_handle );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle < MEMORY_HANDLE_MAX );
@@ -1208,7 +1758,8 @@ void zepto_convert_part_of_request_to_response( MEMORY_HANDLE mem_h, parser_obj*
 
 void zepto_append_part_of_request_to_response( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end )
 {
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == mem_h );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == po_end->mem_handle );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle < MEMORY_HANDLE_MAX );
@@ -1223,8 +1774,10 @@ void zepto_append_part_of_request_to_response( MEMORY_HANDLE mem_h, parser_obj* 
 void zepto_copy_response_to_response_of_another_handle( MEMORY_HANDLE mem_h, MEMORY_HANDLE target_mem_h )
 {
 	ZEPTO_DEBUG_ASSERT( mem_h != target_mem_h );
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
-	ZEPTO_DEBUG_ASSERT( target_mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( target_mem_h )
+//	ZEPTO_DEBUG_ASSERT( target_mem_h != MEMORY_HANDLE_INVALID );
 	// cleanup
 	zepto_response_to_request( target_mem_h );
 	zepto_response_to_request( target_mem_h );
@@ -1238,7 +1791,8 @@ void zepto_copy_response_to_response_of_another_handle( MEMORY_HANDLE mem_h, MEM
 void zepto_append_response_to_response_of_another_handle( MEMORY_HANDLE mem_h, MEMORY_HANDLE target_mem_h )
 {
 	ZEPTO_DEBUG_ASSERT( mem_h != target_mem_h );
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	ZEPTO_DEBUG_ASSERT( target_mem_h != MEMORY_HANDLE_INVALID );
 	// copying
 	uint8_t* dest_buff = memory_object_append( target_mem_h, memory_object_get_response_size( mem_h ) );
@@ -1249,9 +1803,12 @@ void zepto_append_response_to_response_of_another_handle( MEMORY_HANDLE mem_h, M
 
 void zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE mem_h, MEMORY_HANDLE target_mem_h )
 {
+zepto_mem_man_check_sanity();
 	ZEPTO_DEBUG_ASSERT( mem_h != target_mem_h );
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
-	ZEPTO_DEBUG_ASSERT( target_mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h );
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( target_mem_h );
+//	ZEPTO_DEBUG_ASSERT( target_mem_h != MEMORY_HANDLE_INVALID );
 	// cleanup
 	zepto_response_to_request( target_mem_h );
 	zepto_response_to_request( target_mem_h );
@@ -1266,7 +1823,8 @@ void zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE mem_h, MEMO
 void zepto_copy_part_of_request_to_response_of_another_handle( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end, MEMORY_HANDLE target_mem_h )
 {
 	ZEPTO_DEBUG_ASSERT( mem_h != target_mem_h );
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == mem_h );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == po_end->mem_handle );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle < MEMORY_HANDLE_MAX );
@@ -1284,7 +1842,8 @@ void zepto_copy_part_of_request_to_response_of_another_handle( MEMORY_HANDLE mem
 void zepto_append_part_of_request_to_response_of_another_handle( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end, MEMORY_HANDLE target_mem_h )
 {
 	ZEPTO_DEBUG_ASSERT( mem_h != target_mem_h );
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == mem_h );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == po_end->mem_handle );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle < MEMORY_HANDLE_MAX );
@@ -1299,10 +1858,12 @@ void zepto_append_part_of_request_to_response_of_another_handle( MEMORY_HANDLE m
 void zepto_prepend_part_of_request_to_response_of_another_handle( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end, MEMORY_HANDLE target_mem_h )
 {
 	ZEPTO_DEBUG_ASSERT( mem_h != target_mem_h );
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == mem_h );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == po_end->mem_handle );
-	ZEPTO_DEBUG_ASSERT( po_start->mem_handle < MEMORY_HANDLE_MAX );
+	ASSERT_MEMORY_HANDLE_VALID( po_start->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po_start->mem_handle < MEMORY_HANDLE_MAX );
 	ZEPTO_DEBUG_ASSERT( po_start->offset <= po_end->offset );
 	// copying
 	uint8_t* dest_buff = memory_object_prepend( target_mem_h, po_end->offset - po_start->offset );
@@ -1314,9 +1875,11 @@ void zepto_prepend_part_of_request_to_response_of_another_handle( MEMORY_HANDLE 
 /*
 void zepto_convert_part_of_request_to_response( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t cutoff_cnt )
 {
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	ZEPTO_DEBUG_ASSERT( po_start->mem_handle == mem_h );
-	ZEPTO_DEBUG_ASSERT( po_start->mem_handle < MEMORY_HANDLE_MAX );
+	ASSERT_MEMORY_HANDLE_VALID( po_start->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po_start->mem_handle < MEMORY_HANDLE_MAX );
 	ZEPTO_DEBUG_ASSERT( po_start->offset + cutoff_cnt <= memory_object_get_request_size( mem_h ) );
 	MEMORY_HANDLE ret_handle = po_start->mem_handle;
 	po_start->mem_handle = MEMORY_HANDLE_INVALID;
@@ -1326,7 +1889,8 @@ void zepto_convert_part_of_request_to_response( MEMORY_HANDLE mem_h, parser_obj*
 
 void zepto_write_prepend_byte( MEMORY_HANDLE mem_h, uint8_t bt )
 {
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 	uint8_t b = bt;
 //	memory_object_prepend( mem_h, &b, 1 );
 	memory_object_prepend( mem_h, 1 );
@@ -1335,7 +1899,8 @@ void zepto_write_prepend_byte( MEMORY_HANDLE mem_h, uint8_t bt )
 
 void zepto_write_prepend_block( MEMORY_HANDLE mem_h, const uint8_t* block, uint16_t size )
 {
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+//	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
 //	memory_object_prepend( mem_h, block, size );
 	memory_object_prepend( mem_h, size );
 	ZEPTO_MEMCPY( memory_objects[ mem_h ].ptr, block, size );
@@ -1516,7 +2081,8 @@ void zepto_parser_decode_uint_core( uint8_t** packed_num_bytes, uint8_t* bytes_o
 
 void zepto_parser_decode_uint( parser_obj* po, uint8_t* bytes_out, uint8_t target_size )
 {
-	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
+	ASSERT_MEMORY_HANDLE_VALID( po->mem_handle )
+//	ZEPTO_DEBUG_ASSERT( po->mem_handle != MEMORY_HANDLE_INVALID );
 	uint8_t* buff = memory_object_get_request_ptr( po->mem_handle ) + po->offset;
 	ZEPTO_DEBUG_ASSERT( buff != NULL );
 	uint8_t* end = buff;
@@ -1543,11 +2109,27 @@ uint16_t zepto_parse_encoded_uint16( parser_obj* po )
 	return num_out;
 }
 
+uint32_t zepto_parse_encoded_uint32( parser_obj* po )
+{
+	uint32_t num_out;
+	uint8_t buff[4];
+	zepto_parser_decode_uint( po, buff, 4 );
+	num_out = buff[3];
+	num_out <<= 24;
+	num_out |= buff[2];
+	num_out <<= 16;
+	num_out |= buff[1];
+	num_out <<= 8;
+	num_out |= buff[0];
+	return num_out;
+}
+
 
 #if (SA_USED_ENDIANNES == SA_LITTLE_ENDIAN)
 
 void zepto_parser_encode_and_append_uint( MEMORY_HANDLE mem_h, const uint8_t* num_bytes, uint8_t num_sz_max )
 {
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
 	ZEPTO_DEBUG_ASSERT( num_sz_max );
 	ZEPTO_DEBUG_ASSERT( num_sz_max <= 16 ); // TODO: reason behind this limitation is fixed-size intermediate buffers declared below. If greater sizes desired, then either haave larger buffers (remember about stack size!), or implement a version that works locally over a few consequtive bytes
 	uint8_t src_buff[16];
@@ -1585,16 +2167,35 @@ void zepto_parser_encode_and_append_uint( MEMORY_HANDLE mem_h, const uint8_t* nu
 	ZEPTO_MEMCPY( buff, out_buff, sz );
 }
 
+void zepto_parser_encode_and_append_uint8( MEMORY_HANDLE mem_h, uint8_t num )
+{
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+	zepto_parser_encode_and_append_uint( mem_h, &num, 1 );
+}
+
 void zepto_parser_encode_and_append_uint16( MEMORY_HANDLE mem_h, uint16_t num )
 {
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
 	uint8_t buff[2];
 	buff[0] = (uint8_t)num;
 	buff[1] = (uint8_t)(num>>8);
 	zepto_parser_encode_and_append_uint( mem_h, buff, 2 );
 }
 
+void zepto_parser_encode_and_append_uint32( MEMORY_HANDLE mem_h, uint32_t num )
+{
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+	uint8_t buff[4];
+	buff[0] = (uint8_t)num;
+	buff[1] = (uint8_t)(num>>8);
+	buff[2] = (uint8_t)(num>>16);
+	buff[3] = (uint8_t)(num>>24);
+	zepto_parser_encode_and_append_uint( mem_h, buff, 4 );
+}
+
 void zepto_parser_encode_and_prepend_uint( MEMORY_HANDLE mem_h, const uint8_t* num_bytes, uint8_t num_sz_max )
 {
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
 	ZEPTO_DEBUG_ASSERT( num_sz_max );
 	ZEPTO_DEBUG_ASSERT( num_sz_max <= 16 ); // TODO: reason behind this limitation is fixed-size intermediate buffers declared below. If greater sizes desired, then either haave larger buffers (remember about stack size!), or implement a version that works locally over a few consequtive bytes
 	uint8_t src_buff[16];
@@ -1635,20 +2236,11 @@ void zepto_parser_encode_and_prepend_uint( MEMORY_HANDLE mem_h, const uint8_t* n
 
 void zepto_parser_encode_and_prepend_uint16( MEMORY_HANDLE mem_h, uint16_t num )
 {
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
 	uint8_t buff[2];
 	buff[0] = (uint8_t)num;
 	buff[1] = (uint8_t)(num>>8);
 	zepto_parser_encode_and_prepend_uint( mem_h, buff, 2 );
-}
-
-void zepto_parser_encode_and_append_uint32( MEMORY_HANDLE mem_h, uint32_t num )
-{
-	uint8_t buff[4];
-	buff[0] = (uint8_t)num;
-	buff[1] = (uint8_t)(num>>8);
-	buff[2] = (uint8_t)(num>>16);
-	buff[3] = (uint8_t)(num>>24);
-	zepto_parser_encode_and_append_uint( mem_h, buff, 4 );
 }
 
 #elif (SA_USED_ENDIANNES == SA_BIG_ENDIAN)
@@ -1660,29 +2252,103 @@ void zepto_parser_encode_and_append_uint32( MEMORY_HANDLE mem_h, uint32_t num )
 
 void zepto_parser_free_memory( REQUEST_REPLY_HANDLE mem_h )
 {
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
 	memory_object_free( mem_h );
 }
 
 void zepto_parser_free_response( REQUEST_REPLY_HANDLE mem_h )
 {
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
 	memory_object_free_response( mem_h );
 }
 
 void zepto_parser_strip_beginning_of_request( parser_obj* po )
 {
+	ASSERT_MEMORY_HANDLE_VALID( po->mem_handle )
 	memory_object_strip_beginning_of_request( po->mem_handle, po->offset );
 	po->offset = 0;
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 uint16_t ugly_hook_get_request_size( REQUEST_REPLY_HANDLE mem_h )
 {
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
 	return memory_object_get_request_size( mem_h );
 }
 
 uint16_t ugly_hook_get_response_size( REQUEST_REPLY_HANDLE mem_h )
 {
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
 	return memory_object_get_response_size( mem_h );
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+MEMORY_HANDLE acquire_memory_handle()
+{
+	return memory_object_acquire();
+}
+
+void release_memory_handle( MEMORY_HANDLE mem_h )
+{
+	memory_object_release( mem_h );
+}
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// special r/w functions for operations with locally generated data
+
+bool zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t size, uint8_t* buff )
+{
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	ZEPTO_DEBUG_ASSERT( obj->ptr != NULL );
+	if ( obj->rq_size + obj->rsp_size < offset + size ) return false;
+	ZEPTO_MEMCPY( buff, obj->ptr + offset, size );
+	return true;
+}
+
+bool zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t size, const uint8_t* buff )
+{
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	ZEPTO_DEBUG_ASSERT( obj->ptr != NULL );
+	if ( obj->rq_size + obj->rsp_size < offset + size ) return false;
+	ZEPTO_MEMCPY( obj->ptr + offset, buff, size );
+	return true;
+}
+
+void zepto_memman_append_locally_generated_data( MEMORY_HANDLE mem_h, uint16_t size, const uint8_t* buff )
+{
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	ZEPTO_DEBUG_ASSERT( obj->ptr != NULL );
+	uint8_t* buff_to = memory_object_append( mem_h, size );
+	ZEPTO_MEMCPY( buff_to, buff, size );
+}
+
+void zepto_memman_trim_locally_generated_data_at_right( MEMORY_HANDLE mem_h, uint16_t size )
+{
+	ASSERT_MEMORY_HANDLE_VALID( mem_h );
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	ZEPTO_DEBUG_ASSERT( obj->ptr != NULL );
+	uint8_t* buff = obj->ptr;
+	uint16_t ini_sz = obj->rq_size + obj->rsp_size;
+	memory_block_trim_at_right( obj->ptr, ini_sz, size );
+	if ( obj->rsp_size >= size )
+		obj->rsp_size -= size;
+	else
+	{
+		obj->rsp_size = 0;
+		obj->rq_size -= ( size - obj->rsp_size );
+	}
+}
+
+uint16_t zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE mem_h )
+{
+	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
+	return obj->rq_size + obj->rsp_size;
 }

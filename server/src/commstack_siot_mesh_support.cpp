@@ -1360,13 +1360,21 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 	ZEPTO_DEBUG_ASSERT( bus_type_h != MEMORY_HANDLE_INVALID );
 
 	// BROADCAST-BUS-TYPE-LIST
-	write_bus_types_for_device_for_from_santa_packet( bus_type_h, target_id );
+	// TODO: if more than a single target device is to be found, revise lines below (do it with respect to all targets or what?)
+	SIOT_MESH_ROUTING_DATA_ITERATOR it_target;
+	uint8_t ret_code = siot_mesh_at_root_get_device_data( target_id, it_target );
+	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK );
+	int i;
+	for ( i=0; i<it_target->bus_type_list.size(); i++ )
+	{
+		write_bus_types_for_device_for_from_santa_packet( bus_type_h, it_target->bus_type_list[i] + 1 );
+	}
+	write_bus_types_for_device_for_from_santa_packet( bus_type_h, 0 );
 
 	// 2. generate packets with respect to groups of retransmitters
 
 	MEMORY_HANDLE output_h = acquire_memory_handle();
 	ZEPTO_DEBUG_ASSERT( output_h != MEMORY_HANDLE_INVALID );
-	uint8_t ret_code;
 	uint16_t link_id;
 
 	SIOT_MESH_ROUTING_DATA_ITERATOR it;
@@ -1386,9 +1394,10 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 
 				zepto_append_response_to_response_of_another_handle( bus_type_h, output_h );
 
-				// Target-Address
+				// Multiple-Target-Addresses
 				header = 0 | ( target_id << 1 ); // NODE-ID, no more data
 				zepto_parser_encode_and_append_uint16( output_h, header );
+				zepto_parser_encode_and_append_uint16( output_h, 0 );
 
 				// OPTIONAL-TARGET-REPLY-DELAY
 

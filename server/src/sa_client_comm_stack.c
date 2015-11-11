@@ -127,7 +127,7 @@ int main_loop()
 	}
 	siot_mesh_init_tables();
 		
-	uint16_t link_id;
+	uint16_t bus_id;
 	uint16_t target_device_id;
 
 	// MAIN LOOP
@@ -174,7 +174,7 @@ wait_for_comm_event:
 
 #if 1//SIOT_MESH_IMPLEMENTATION_WORKS
 		// 2. MESH
-		ret_code = handler_siot_mesh_timer( &currt, &wait_for,  working_handle.packet_h, &target_device_id, &link_id );
+		ret_code = handler_siot_mesh_timer( &currt, &wait_for,  working_handle.packet_h, &target_device_id, &bus_id );
 		switch ( ret_code )
 		{
 			case SIOT_MESH_RET_PASS_TO_SEND:
@@ -761,7 +761,7 @@ saoudp_send:
 		}
 
 #if 1//SIOT_MESH_IMPLEMENTATION_WORKS
-		ret_code = handler_siot_mesh_send_packet( &currt, &wait_for, devices[dev_in_use].device_id,  working_handle.packet_h, working_handle.resend_cnt, &link_id ); // currently we know only about a single client with id=1
+		ret_code = handler_siot_mesh_send_packet( &currt, &wait_for, devices[dev_in_use].device_id,  working_handle.packet_h, working_handle.resend_cnt, &bus_id ); // currently we know only about a single client with id=1
 		zepto_response_to_request(  working_handle.packet_h );
 
 		switch ( ret_code )
@@ -788,7 +788,7 @@ saoudp_send:
 
 		// send packet
 hal_send:
-//		ZEPTO_DEBUG_ASSERT( link_id == 0 ); // TODO: link_id must be a part of send_packet() call; we are now just in the middle of development...
+//		ZEPTO_DEBUG_ASSERT( bus_id == 0 ); // TODO: bus_id must be a part of send_packet() call; we are now just in the middle of development...
 		ret_code = HAL_SEND_PACKET_TO_DEVICE(  working_handle.packet_h );
 		zepto_parser_free_memory(  working_handle.packet_h );
 		if (ret_code != COMMLAYER_RET_OK )

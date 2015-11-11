@@ -1110,7 +1110,7 @@ typedef struct _MESH_PENDING_RESENDS
 	uint8_t resend_cnt;
 	sa_time_val next_resend_time;
 	uint16_t checksum;
-	uint16_t target_id;
+	uint16_t target_or_bus_id;
 } MESH_PENDING_RESENDS;
 
 typedef list< MESH_PENDING_RESENDS > PENDING_RESENDS; // NOTE: switching to vector requires revision of code around calls to erase()
@@ -1122,7 +1122,7 @@ void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val*
 	// 1. add resend task
 	MESH_PENDING_RESENDS resend;
 	resend.type = MESH_PENDING_RESEND_TYPE_SELF_REPEATED;
-	resend.target_id = target_id;
+	resend.target_or_bus_id = target_id;
 	resend.packet_sz = memory_object_get_request_size( packet );
 	resend.packet_data = new uint8_t [resend.packet_sz];
 	ZEPTO_DEBUG_ASSERT( resend.packet_sz != 0 );
@@ -1150,12 +1150,12 @@ void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val*
 	}
 }
 
-void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t target_id )
+void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t bus_id )
 {
 	// 1. add resend task
 	MESH_PENDING_RESENDS resend;
-	resend.type = MESH_PENDING_RESEND_TYPE_SELF_REPEATED;
-	resend.target_id = target_id;
+	resend.type = MESH_PENDING_RESEND_FROM_SANTA;
+	resend.target_or_bus_id = bus_id;
 	resend.packet_sz = memory_object_get_request_size( packet );
 	resend.packet_data = new uint8_t [resend.packet_sz];
 	ZEPTO_DEBUG_ASSERT( resend.packet_sz != 0 );
@@ -1168,7 +1168,7 @@ void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_
 	pending_resends.push_back( resend );
 }
 
-uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, sa_time_val* time_to_next_event )
+uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_or_bus_id, sa_time_val* time_to_next_event )
 {
 	PENDING_RESENDS_ITERATOR it, it_oldest = pending_resends.end();
 	sa_time_val oldest_time_point;
@@ -1210,11 +1210,11 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 	// there is a packet to resend
 	switch ( it_oldest->type )
 	{
-		case MESH_PENDING_RESEND_FROM_SANTA:
+		case MESH_PENDING_RESEND_TYPE_SELF_REPEATED:
 		{
 			bool final_in_seq = it_oldest->resend_cnt == 1;
 			ZEPTO_DEBUG_ASSERT( it_oldest->resend_cnt > 0 );
-			*target_id = it_oldest->target_id;
+			*target_or_bus_id = it_oldest->target_or_bus_id;
 			zepto_parser_free_memory( packet );
 			zepto_write_block( packet, it_oldest->packet_data, it_oldest->packet_sz );
 			if ( final_in_seq )
@@ -1239,10 +1239,10 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 			return final_in_seq ? SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL : SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM;
 			break;
 		}
-		case MESH_PENDING_RESEND_TYPE_SELF_REPEATED:
+		case MESH_PENDING_RESEND_FROM_SANTA:
 		{
 			ZEPTO_DEBUG_ASSERT( it_oldest->resend_cnt == 1 );
-			*target_id = it_oldest->target_id;
+			*target_or_bus_id = it_oldest->target_or_bus_id;
 			zepto_parser_free_memory( packet );
 			zepto_write_block( packet, it_oldest->packet_data, it_oldest->packet_sz );
 			if ( it_oldest->packet_data != NULL )
@@ -1304,7 +1304,7 @@ void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, cons
 
 	while ( it != pending_resends.end() )
 	{
-		if ( it->type == MESH_PENDING_RESEND_TYPE_SELF_REPEATED && it->target_id == target_id )
+		if ( it->type == MESH_PENDING_RESEND_TYPE_SELF_REPEATED && it->target_or_bus_id == target_id )
 		{
 			it_erase = it;
 			++it;
@@ -1347,12 +1347,12 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 	zepto_parser_encode_and_append_uint16( prefix_h, 0 ); // ROOT
 
 	// LAST-HOP-BUS-ID
-	zepto_parser_encode_and_append_uint16( prefix_h, bus_id_used );
+	// (will be added later);
 
 	// REQUEST-ID
 	static uint16_t rq_id = 0; // REQUEST-ID
 	rq_id++; // TODO: make true global; TODO: think whether this id is globally or per-device unique
-	zepto_parser_encode_and_append_uint16( prefix_h, 0 ); // REQUEST-ID
+	// (will be added later);
 
 	// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
 
@@ -1376,6 +1376,7 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 	MEMORY_HANDLE output_h = acquire_memory_handle();
 	ZEPTO_DEBUG_ASSERT( output_h != MEMORY_HANDLE_INVALID );
 	uint16_t link_id;
+	SIOT_MESH_LINK link;
 
 	SIOT_MESH_ROUTING_DATA_ITERATOR it;
 	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )
@@ -1384,8 +1385,19 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 			ret_code = siot_mesh_at_root_target_to_link_id( target_id, &link_id );
 			if ( ret_code == SIOT_MESH_RET_OK ) // we know link to this retransmitter; prepare a packet for it
 			{
+				ret_code = siot_mesh_get_link( link_id, &link );
+				ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK );
+
 				zepto_parser_free_memory( output_h );
+
+				// generated prefix 9the same for all packets0
 				zepto_copy_response_to_response_of_another_handle( prefix_h, output_h );
+
+				// LAST-HOP-BUS-ID
+				zepto_parser_encode_and_append_uint16( prefix_h, link.BUS_ID );
+
+				// REQUEST-ID
+				zepto_parser_encode_and_append_uint16( prefix_h, rq_id );
 
 				uint8_t more_data_in_record = 0;
 				uint16_t header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
@@ -1421,7 +1433,7 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 				zepto_write_uint8( output_h, (uint8_t)checksum );
 				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
 
-				siot_mesh_at_root_add_send_from_santa_task( output_h, currt, it->device_id );
+				siot_mesh_at_root_add_send_from_santa_task( output_h, currt, link.BUS_ID );
 				TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
 			}
 		}

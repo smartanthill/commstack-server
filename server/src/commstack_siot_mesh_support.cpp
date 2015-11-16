@@ -207,7 +207,7 @@ uint8_t siot_mesh_at_root_get_device_data( uint16_t device_id, SIOT_MESH_ROUTING
 
 	return SIOT_MESH_AT_ROOT_RET_NOT_FOUND;
 }
-
+/*
 uint8_t write_bus_types_for_device_for_from_santa_packet( MEMORY_HANDLE mem_h, uint16_t device_id )
 {
 	SIOT_MESH_ROUTING_DATA_ITERATOR it;
@@ -220,7 +220,7 @@ uint8_t write_bus_types_for_device_for_from_santa_packet( MEMORY_HANDLE mem_h, u
 	zepto_write_uint8( mem_h, 0 ); // list terminator
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
-
+*/
 uint16_t write_retransmitter_list_for_from_santa_packet( MEMORY_HANDLE mem_h )
 {
 	SIOT_MESH_ROUTING_DATA_ITERATOR it;
@@ -1341,6 +1341,8 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 
 	MEMORY_HANDLE prefix_h = acquire_memory_handle();
 	ZEPTO_DEBUG_ASSERT( prefix_h != MEMORY_HANDLE_INVALID );
+	MEMORY_HANDLE retransmitters_h = acquire_memory_handle();
+	ZEPTO_DEBUG_ASSERT( retransmitters_h != MEMORY_HANDLE_INVALID );
 
 	// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, OPTIONAL-EXTRA-HEADERS
 	uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( 4 << 5 ); // '1', packet type, 0 (no extra headers), TTL = 4
@@ -1366,22 +1368,97 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 	// TODO: if more than a single target device is to be found, revise lines below (do it with respect to all targets or what?)
 	SIOT_MESH_ROUTING_DATA_ITERATOR it_target;
 	uint8_t ret_code = siot_mesh_at_root_get_device_data( target_id, it_target );
+if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
+{
+	ret_code = ret_code;
+}
 	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK );
-	int i;
+	unsigned int i;
 	for ( i=0; i<it_target->bus_type_list.size(); i++ )
-	{
-		write_bus_types_for_device_for_from_santa_packet( bus_type_h, it_target->bus_type_list[i] + 1 );
-	}
-	write_bus_types_for_device_for_from_santa_packet( bus_type_h, 0 );
+		zepto_write_uint8( bus_type_h, it_target->bus_type_list[i] + 1 );
+	zepto_write_uint8( bus_type_h, 0 );
 
-	// 2. generate packets with respect to groups of retransmitters
+	// 2. get a list of retransmitters with links to
+	uint16_t link_id;
+//	SIOT_MESH_LINK link;
+	SIOT_MESH_ROUTING_DATA_ITERATOR it;
+//	int known_retr_cnt = 0;
+	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )
+		if ( it->is_retransmitter )
+		{
+			// TODO: consider filtering based on availability of a bus of a proper type
+			ret_code = siot_mesh_at_root_target_to_link_id( target_id, &link_id );
+			if ( ret_code == SIOT_MESH_RET_OK ) // we know link to this retransmitter; prepare a packet for it
+			{
+				uint8_t more_data_in_record = 0;
+				uint16_t header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
+				zepto_parser_encode_and_append_uint16( retransmitters_h, header );
+//				known_retr_cnt++;
+			}
+		}
+	zepto_parser_encode_and_append_uint16( retransmitters_h, 0 ); // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
+
+
+	// 3. generate packets (in current implementation we assume that the root has a single bus)
+	// TODO: if a root, in general, is supposed to have more than one bus, consider this case (packets for each bus)
 
 	MEMORY_HANDLE output_h = acquire_memory_handle();
 	ZEPTO_DEBUG_ASSERT( output_h != MEMORY_HANDLE_INVALID );
-	uint16_t link_id;
-	SIOT_MESH_LINK link;
 
-	SIOT_MESH_ROUTING_DATA_ITERATOR it;
+	// for ( each bus id )
+	{
+				zepto_parser_free_memory( output_h );
+
+				// generated prefix (the same for all packets)
+				zepto_copy_response_to_response_of_another_handle( prefix_h, output_h );
+
+				// LAST-HOP-BUS-ID
+				zepto_parser_encode_and_append_uint16( output_h, 0 );
+
+				// REQUEST-ID
+				zepto_parser_encode_and_append_uint16( output_h, rq_id );
+
+				//  OPTIONAL-DELAY-UNIT
+
+				// MULTIPLE-RETRANSMITTING-ADDRESSES
+				zepto_append_response_to_response_of_another_handle( retransmitters_h, output_h );
+
+				// BROADCAST-BUS-TYPE-LIST 
+				zepto_append_response_to_response_of_another_handle( bus_type_h, output_h );
+
+				// Multiple-Target-Addresses
+				header = 0 | ( target_id << 1 ); // NODE-ID, no more data
+				zepto_parser_encode_and_append_uint16( output_h, header );
+				zepto_parser_encode_and_append_uint16( output_h, 0 );
+
+				// OPTIONAL-TARGET-REPLY-DELAY
+
+				// OPTIONAL-PAYLOAD-SIZE
+
+				// HEADER-CHECKSUM
+				uint16_t rsp_sz = memory_object_get_response_size( output_h );
+				uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, 0, rsp_sz, 0 );
+				zepto_write_uint8( output_h, (uint8_t)checksum );
+				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
+
+				// PAYLOAD
+				parser_obj po, po1;
+				zepto_parser_init( &po, mem_h );
+				zepto_parser_init( &po1, mem_h );
+				zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+				zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po, &po1, output_h );
+
+				// FULL-CHECKSUM
+				checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
+				zepto_write_uint8( output_h, (uint8_t)checksum );
+				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
+
+				zepto_response_to_request( output_h );
+				siot_mesh_at_root_add_send_from_santa_task( output_h, currt, 0 );
+				TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
+	}
+
+#if 0
 	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )
 		if ( it->is_retransmitter )
 		{
@@ -1397,10 +1474,10 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 				zepto_copy_response_to_response_of_another_handle( prefix_h, output_h );
 
 				// LAST-HOP-BUS-ID
-				zepto_parser_encode_and_append_uint16( prefix_h, link.BUS_ID );
+				zepto_parser_encode_and_append_uint16( output_h, 0 );
 
 				// REQUEST-ID
-				zepto_parser_encode_and_append_uint16( prefix_h, rq_id );
+				zepto_parser_encode_and_append_uint16( output_h, rq_id );
 
 				uint8_t more_data_in_record = 0;
 				uint16_t header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
@@ -1491,8 +1568,10 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 				TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
 			}
 		}
+#endif // 0
 
 	release_memory_handle( output_h );
 	release_memory_handle( bus_type_h );
+	release_memory_handle( retransmitters_h );
 	release_memory_handle( prefix_h );
 }

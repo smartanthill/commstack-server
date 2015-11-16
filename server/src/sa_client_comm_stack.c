@@ -232,6 +232,11 @@ wait_for_comm_event:
 				}
 				break;
 			}
+			default:
+			{
+				break;
+				ZEPTO_DEBUG_ASSERT( 0 == "Unexpected ret code" );
+			}
 		}
 #endif // SIOT_MESH_IMPLEMENTATION_WORKS
 

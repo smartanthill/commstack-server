@@ -812,6 +812,8 @@ void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t repo
 	vector<int>& prev_list = affected_list1;
 	vector<int>& next_list = affected_list2;
 
+	ZEPTO_DEBUG_ASSERT( failed_hop_id != SIOT_MESH_NEXT_HOP_UNDEFINED ); // not yet properly considered and implemented
+
 	SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE update;
 
 	// 1. find index of root data
@@ -1325,13 +1327,14 @@ void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, cons
 //////////////////////////////////////////////////////////////////////////////////////////////////
 // complex packet generation
 
-void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t bus_id_used )
+void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t target_id )
 {
+	// TODO++++: revision required
 	// ASSUMPTIONS OF THE CURRENT IMPLEMENTATION
 	// 1. As seen from this function parameters in the current implementation we assume only one device at a time to be found
 	// 2. [CHECK] We also assume that the Root has a single bus
 
-	// Santa Packet structure: | SAMP-FROM-SANTA-DATA-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | REQUEST-ID | OPTIONAL-DELAY-UNIT | MULTIPLE-RETRANSMITTING-ADDRESSES | BROADCAST-BUS-TYPE-LIST | Target-Address | OPTIONAL-TARGET-REPLY-DELAY | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+	// Santa Packet structure: | SAMP-FROM-SANTA-DATA-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | LAST-HOP-BUS-ID | REQUEST-ID | OPTIONAL-DELAY-UNIT | MULTIPLE-RETRANSMITTING-ADDRESSES | BROADCAST-BUS-TYPE-LIST | Target-Address | OPTIONAL-TARGET-REPLY-DELAY | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
 
 	// 1. prepare common parts
@@ -1390,7 +1393,7 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 
 				zepto_parser_free_memory( output_h );
 
-				// generated prefix 9the same for all packets0
+				// generated prefix (the same for all packets)
 				zepto_copy_response_to_response_of_another_handle( prefix_h, output_h );
 
 				// LAST-HOP-BUS-ID
@@ -1426,7 +1429,7 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 				zepto_parser_init( &po, mem_h );
 				zepto_parser_init( &po1, mem_h );
 				zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
-				zepto_copy_part_of_request_to_response_of_another_handle( mem_h, &po, &po1, output_h );
+				zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po, &po1, output_h );
 
 				// FULL-CHECKSUM
 				checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
@@ -1434,6 +1437,57 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
 
 				siot_mesh_at_root_add_send_from_santa_task( output_h, currt, link.BUS_ID );
+				TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
+			}
+			else
+			{
+				zepto_parser_free_memory( output_h );
+
+				// generated prefix (the same for all packets)
+				zepto_copy_response_to_response_of_another_handle( prefix_h, output_h );
+
+				// LAST-HOP-BUS-ID
+				zepto_parser_encode_and_append_uint16( prefix_h, 0 );
+
+				// REQUEST-ID
+				zepto_parser_encode_and_append_uint16( prefix_h, rq_id );
+
+				uint8_t more_data_in_record = 0;
+//				uint16_t header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
+//				zepto_parser_encode_and_append_uint16( output_h, header );
+				zepto_parser_encode_and_append_uint16( output_h, 0 ); // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
+
+				zepto_append_response_to_response_of_another_handle( bus_type_h, output_h );
+
+				// Multiple-Target-Addresses
+				header = 0 | ( target_id << 1 ); // NODE-ID, no more data
+				zepto_parser_encode_and_append_uint16( output_h, header );
+				zepto_parser_encode_and_append_uint16( output_h, 0 );
+
+				// OPTIONAL-TARGET-REPLY-DELAY
+
+				// OPTIONAL-PAYLOAD-SIZE
+
+				// HEADER-CHECKSUM
+				uint16_t rsp_sz = memory_object_get_response_size( output_h );
+				uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, 0, rsp_sz, 0 );
+				zepto_write_uint8( output_h, (uint8_t)checksum );
+				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
+
+				// PAYLOAD
+				parser_obj po, po1;
+				zepto_parser_init( &po, mem_h );
+				zepto_parser_init( &po1, mem_h );
+				zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+				zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po, &po1, output_h );
+
+				// FULL-CHECKSUM
+				checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
+				zepto_write_uint8( output_h, (uint8_t)checksum );
+				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
+
+				zepto_response_to_request( output_h );
+				siot_mesh_at_root_add_send_from_santa_task( output_h, currt, 0 );
 				TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
 			}
 		}

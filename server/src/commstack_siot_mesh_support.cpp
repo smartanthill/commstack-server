@@ -686,6 +686,7 @@ void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUT
 			header = more | ( ADD_OR_MODIFY_LINK_ENTRY << 1 ) | ( update->siot_m_route_table_update[i].LINK_ID << 4 );
 			zepto_parser_encode_and_append_uint16( mem_h, header );
 			zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].BUS_ID );
+			zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].NEXT_HOP );
 			zepto_parser_encode_and_append_uint32( mem_h, 0 ); // intra-bus id
 		}
 	}
@@ -1112,7 +1113,8 @@ typedef struct _MESH_PENDING_RESENDS
 	uint8_t resend_cnt;
 	sa_time_val next_resend_time;
 	uint16_t checksum;
-	uint16_t target_or_bus_id;
+	uint16_t target_id;
+	uint16_t bus_id;
 } MESH_PENDING_RESENDS;
 
 typedef list< MESH_PENDING_RESENDS > PENDING_RESENDS; // NOTE: switching to vector requires revision of code around calls to erase()
@@ -1124,7 +1126,8 @@ void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val*
 	// 1. add resend task
 	MESH_PENDING_RESENDS resend;
 	resend.type = MESH_PENDING_RESEND_TYPE_SELF_REPEATED;
-	resend.target_or_bus_id = target_id;
+	resend.target_id = target_id;
+	resend.bus_id = SIOT_MESH_BUS_UNDEFINED;
 	resend.packet_sz = memory_object_get_request_size( packet );
 	resend.packet_data = new uint8_t [resend.packet_sz];
 	ZEPTO_DEBUG_ASSERT( resend.packet_sz != 0 );
@@ -1157,7 +1160,8 @@ void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_
 	// 1. add resend task
 	MESH_PENDING_RESENDS resend;
 	resend.type = MESH_PENDING_RESEND_FROM_SANTA;
-	resend.target_or_bus_id = bus_id;
+	resend.bus_id = bus_id;
+	resend.target_id = SIOT_MESH_TARGET_UNDEFINED;
 	resend.packet_sz = memory_object_get_request_size( packet );
 	resend.packet_data = new uint8_t [resend.packet_sz];
 	ZEPTO_DEBUG_ASSERT( resend.packet_sz != 0 );
@@ -1170,7 +1174,7 @@ void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_
 	pending_resends.push_back( resend );
 }
 
-uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_or_bus_id, sa_time_val* time_to_next_event )
+uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, uint16_t* bus_id, sa_time_val* time_to_next_event )
 {
 	PENDING_RESENDS_ITERATOR it, it_oldest = pending_resends.end();
 	sa_time_val oldest_time_point;
@@ -1210,13 +1214,16 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 	}
 
 	// there is a packet to resend
+	*target_id = it_oldest->target_id;
+	*bus_id = it_oldest->bus_id;
 	switch ( it_oldest->type )
 	{
 		case MESH_PENDING_RESEND_TYPE_SELF_REPEATED:
 		{
+			ZEPTO_DEBUG_ASSERT( *target_id != SIOT_MESH_TARGET_UNDEFINED );
+			ZEPTO_DEBUG_ASSERT( *bus_id == SIOT_MESH_BUS_UNDEFINED );
 			bool final_in_seq = it_oldest->resend_cnt == 1;
 			ZEPTO_DEBUG_ASSERT( it_oldest->resend_cnt > 0 );
-			*target_or_bus_id = it_oldest->target_or_bus_id;
 			zepto_parser_free_memory( packet );
 			zepto_write_block( packet, it_oldest->packet_data, it_oldest->packet_sz );
 			if ( final_in_seq )
@@ -1243,8 +1250,9 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 		}
 		case MESH_PENDING_RESEND_FROM_SANTA:
 		{
+			ZEPTO_DEBUG_ASSERT( *target_id == SIOT_MESH_TARGET_UNDEFINED );
+			ZEPTO_DEBUG_ASSERT( *bus_id != SIOT_MESH_BUS_UNDEFINED );
 			ZEPTO_DEBUG_ASSERT( it_oldest->resend_cnt == 1 );
-			*target_or_bus_id = it_oldest->target_or_bus_id;
 			zepto_parser_free_memory( packet );
 			zepto_write_block( packet, it_oldest->packet_data, it_oldest->packet_sz );
 			if ( it_oldest->packet_data != NULL )
@@ -1306,7 +1314,7 @@ void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, cons
 
 	while ( it != pending_resends.end() )
 	{
-		if ( it->type == MESH_PENDING_RESEND_TYPE_SELF_REPEATED && it->target_or_bus_id == target_id )
+		if ( it->type == MESH_PENDING_RESEND_TYPE_SELF_REPEATED && it->target_id == target_id )
 		{
 			it_erase = it;
 			++it;

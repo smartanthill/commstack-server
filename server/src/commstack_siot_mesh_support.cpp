@@ -1121,13 +1121,13 @@ typedef list< MESH_PENDING_RESENDS > PENDING_RESENDS; // NOTE: switching to vect
 typedef list< MESH_PENDING_RESENDS >::iterator PENDING_RESENDS_ITERATOR;
 PENDING_RESENDS pending_resends;
 
-void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, sa_time_val* time_to_next_event )
+void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, uint16_t bus_id, sa_time_val* time_to_next_event )
 {
 	// 1. add resend task
 	MESH_PENDING_RESENDS resend;
 	resend.type = MESH_PENDING_RESEND_TYPE_SELF_REPEATED;
 	resend.target_id = target_id;
-	resend.bus_id = SIOT_MESH_BUS_UNDEFINED;
+	resend.bus_id = bus_id;
 	resend.packet_sz = memory_object_get_request_size( packet );
 	resend.packet_data = new uint8_t [resend.packet_sz];
 	ZEPTO_DEBUG_ASSERT( resend.packet_sz != 0 );
@@ -1221,7 +1221,7 @@ uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_v
 		case MESH_PENDING_RESEND_TYPE_SELF_REPEATED:
 		{
 			ZEPTO_DEBUG_ASSERT( *target_id != SIOT_MESH_TARGET_UNDEFINED );
-			ZEPTO_DEBUG_ASSERT( *bus_id == SIOT_MESH_BUS_UNDEFINED );
+			ZEPTO_DEBUG_ASSERT( *bus_id != SIOT_MESH_BUS_UNDEFINED );
 			bool final_in_seq = it_oldest->resend_cnt == 1;
 			ZEPTO_DEBUG_ASSERT( it_oldest->resend_cnt > 0 );
 			zepto_parser_free_memory( packet );
@@ -1345,6 +1345,8 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 	// Santa Packet structure: | SAMP-FROM-SANTA-DATA-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | LAST-HOP-BUS-ID | REQUEST-ID | OPTIONAL-DELAY-UNIT | MULTIPLE-RETRANSMITTING-ADDRESSES | BROADCAST-BUS-TYPE-LIST | Target-Address | OPTIONAL-TARGET-REPLY-DELAY | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
 
+	ZEPTO_DEBUG_ASSERT( target_id && target_id != SIOT_MESH_TARGET_UNDEFINED ); // root is never a target (sanity check)
+
 	// 1. prepare common parts
 
 	MEMORY_HANDLE prefix_h = acquire_memory_handle();
@@ -1395,12 +1397,12 @@ if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
 		if ( it->is_retransmitter )
 		{
 			// TODO: consider filtering based on availability of a bus of a proper type
-			ret_code = siot_mesh_at_root_target_to_link_id( target_id, &link_id );
+			ret_code = siot_mesh_at_root_target_to_link_id( it->device_id, &link_id );
 			if ( ret_code == SIOT_MESH_RET_OK ) // we know link to this retransmitter; prepare a packet for it
 			{
 				uint8_t more_data_in_record = 0;
-				uint16_t header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
-				zepto_parser_encode_and_append_uint16( retransmitters_h, header );
+				uint16_t retr_header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
+				zepto_parser_encode_and_append_uint16( retransmitters_h, retr_header );
 //				known_retr_cnt++;
 			}
 		}

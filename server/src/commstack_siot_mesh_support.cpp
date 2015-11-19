@@ -755,7 +755,7 @@ uint8_t siot_mesh_at_root_update_done( uint16_t device_id )
 						// we have found a predecessor, which has a chance to become 'last', and, therefore, a canditate to be processed next.
 						// we need to make sure that it is not a predecessor for any other item
 						ZEPTO_DEBUG_ASSERT( !it1->in_progress );
-						ZEPTO_DEBUG_ASSERT( !it1->is_last );
+						// note: if it1 has been added while it was 'in progress", it1->is_last has a chance to be true
 						bool is_predecessor = false; // as an assumption
 						for ( it2 = mesh_routing_data_updates.begin(); it2 != mesh_routing_data_updates.end(); ++it2 )
 							if ( it1 != it2 && it2 != it && it1->device_id == it2->prev_device_id )
@@ -1144,7 +1144,7 @@ void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val*
 
 	// 2. calculate time to the nearest event
 	PENDING_RESENDS_ITERATOR it;
-	SA_TIME_SET_INFINITE_TIME( *time_to_next_event );
+//	SA_TIME_SET_INFINITE_TIME( *time_to_next_event );
 	sa_time_val remaining;
 	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
 	{

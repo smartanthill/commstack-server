@@ -1128,12 +1128,17 @@ void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val*
 	resend.type = MESH_PENDING_RESEND_TYPE_SELF_REPEATED;
 	resend.target_id = target_id;
 	resend.bus_id = bus_id;
-	resend.packet_sz = memory_object_get_request_size( packet );
+	resend.packet_sz = memory_object_get_response_size( packet );
 	resend.packet_data = new uint8_t [resend.packet_sz];
 	ZEPTO_DEBUG_ASSERT( resend.packet_sz != 0 );
-	parser_obj po;
+	parser_obj po, po1;
+	zepto_response_to_request( packet );
 	zepto_parser_init( &po, packet );
 	zepto_parse_read_block( &po, resend.packet_data, resend.packet_sz );
+	zepto_parser_init( &po, packet );
+	zepto_parser_init( &po1, packet );
+	zepto_parse_skip_block( &po1, resend.packet_sz );
+	zepto_convert_part_of_request_to_response( packet, &po, &po1 );
 	resend.checksum = checksum;
 	resend.resend_cnt = SIOT_MESH_SUBJECT_FOR_MESH_RESEND;
 	sa_time_val diff_tval;
@@ -1467,118 +1472,6 @@ if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
 				siot_mesh_at_root_add_send_from_santa_task( output_h, currt, 0 );
 				TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
 	}
-
-#if 0
-	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )
-		if ( it->is_retransmitter )
-		{
-			ret_code = siot_mesh_at_root_target_to_link_id( target_id, &link_id );
-			if ( ret_code == SIOT_MESH_RET_OK ) // we know link to this retransmitter; prepare a packet for it
-			{
-				ret_code = siot_mesh_get_link( link_id, &link );
-				ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK );
-
-				zepto_parser_free_memory( output_h );
-
-				// generated prefix (the same for all packets)
-				zepto_copy_response_to_response_of_another_handle( prefix_h, output_h );
-
-				// LAST-HOP-BUS-ID
-				zepto_parser_encode_and_append_uint16( output_h, 0 );
-
-				// REQUEST-ID
-				zepto_parser_encode_and_append_uint16( output_h, rq_id );
-
-				uint8_t more_data_in_record = 0;
-				uint16_t header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
-				zepto_parser_encode_and_append_uint16( output_h, header );
-				zepto_parser_encode_and_append_uint16( output_h, 0 ); // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
-
-				zepto_append_response_to_response_of_another_handle( bus_type_h, output_h );
-
-				// Multiple-Target-Addresses
-				header = 0 | ( target_id << 1 ); // NODE-ID, no more data
-				zepto_parser_encode_and_append_uint16( output_h, header );
-				zepto_parser_encode_and_append_uint16( output_h, 0 );
-
-				// OPTIONAL-TARGET-REPLY-DELAY
-
-				// OPTIONAL-PAYLOAD-SIZE
-
-				// HEADER-CHECKSUM
-				uint16_t rsp_sz = memory_object_get_response_size( output_h );
-				uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, 0, rsp_sz, 0 );
-				zepto_write_uint8( output_h, (uint8_t)checksum );
-				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
-
-				// PAYLOAD
-				parser_obj po, po1;
-				zepto_parser_init( &po, mem_h );
-				zepto_parser_init( &po1, mem_h );
-				zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
-				zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po, &po1, output_h );
-
-				// FULL-CHECKSUM
-				checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
-				zepto_write_uint8( output_h, (uint8_t)checksum );
-				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
-
-				siot_mesh_at_root_add_send_from_santa_task( output_h, currt, link.BUS_ID );
-				TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
-			}
-			else
-			{
-				zepto_parser_free_memory( output_h );
-
-				// generated prefix (the same for all packets)
-				zepto_copy_response_to_response_of_another_handle( prefix_h, output_h );
-
-				// LAST-HOP-BUS-ID
-				zepto_parser_encode_and_append_uint16( prefix_h, 0 );
-
-				// REQUEST-ID
-				zepto_parser_encode_and_append_uint16( prefix_h, rq_id );
-
-				uint8_t more_data_in_record = 0;
-//				uint16_t header = more_data_in_record | ( ( it->device_id + 1 ) << 1 );
-//				zepto_parser_encode_and_append_uint16( output_h, header );
-				zepto_parser_encode_and_append_uint16( output_h, 0 ); // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
-
-				zepto_append_response_to_response_of_another_handle( bus_type_h, output_h );
-
-				// Multiple-Target-Addresses
-				header = 0 | ( target_id << 1 ); // NODE-ID, no more data
-				zepto_parser_encode_and_append_uint16( output_h, header );
-				zepto_parser_encode_and_append_uint16( output_h, 0 );
-
-				// OPTIONAL-TARGET-REPLY-DELAY
-
-				// OPTIONAL-PAYLOAD-SIZE
-
-				// HEADER-CHECKSUM
-				uint16_t rsp_sz = memory_object_get_response_size( output_h );
-				uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, 0, rsp_sz, 0 );
-				zepto_write_uint8( output_h, (uint8_t)checksum );
-				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
-
-				// PAYLOAD
-				parser_obj po, po1;
-				zepto_parser_init( &po, mem_h );
-				zepto_parser_init( &po1, mem_h );
-				zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
-				zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po, &po1, output_h );
-
-				// FULL-CHECKSUM
-				checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
-				zepto_write_uint8( output_h, (uint8_t)checksum );
-				zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
-
-				zepto_response_to_request( output_h );
-				siot_mesh_at_root_add_send_from_santa_task( output_h, currt, 0 );
-				TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
-			}
-		}
-#endif // 0
 
 	release_memory_handle( output_h );
 	release_memory_handle( bus_type_h );

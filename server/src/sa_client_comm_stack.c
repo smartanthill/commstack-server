@@ -129,6 +129,7 @@ int main_loop()
 		
 	uint16_t bus_id;
 	uint16_t target_device_id;
+	bool for_ctr = 0;
 
 	// MAIN LOOP
 	for (;;)
@@ -154,6 +155,7 @@ wait_for_comm_event:
 				ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE && ret_code != SAGDP_RET_OK );
 				zepto_response_to_request(  working_handle.packet_h );
 				zepto_response_to_request( working_handle.addr_h );
+				for_ctr = 1;
 				goto saspsend;
 			}
 
@@ -168,6 +170,7 @@ wait_for_comm_event:
 				ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE && ret_code != SAGDP_RET_OK );
 				zepto_response_to_request(  working_handle.packet_h );
 				zepto_response_to_request( working_handle.addr_h );
+				for_ctr = 0;
 				goto saspsend;
 			}
 		}
@@ -193,13 +196,14 @@ wait_for_comm_event:
 //				goto sagdpsend;
 				zepto_parser_free_memory( working_handle.addr_h );
 //				sa_get_time( &currt );
-				ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_ctr) );
+				for_ctr = 1;
+				ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_ctr), &(working_handle.resend_cnt) );
 				if ( ret_code == SAGDP_RET_NEED_NONCE )
 				{
 					ret_code = handler_sasp_get_packet_id( nonce, &(devices[dev_in_use].sasp_data), devices[dev_in_use].device_id );
 					ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
 //					sa_get_time( &(currt) );
-					ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_ctr) );
+					ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_ctr), &(working_handle.resend_cnt) );
 					ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 				}
 				zepto_response_to_request(  working_handle.packet_h );
@@ -479,7 +483,7 @@ wait_for_comm_event:
 
 		// 3. pass to SAGDP a new packet
 		HAL_GET_TIME( &(currt), TIME_REQUEST_POINT__AFTER_SASP ); // motivation: requested after a potentially long operation in sasp handler
-		bool for_ctr = handler_sagdp_is_up_packet_ctr(  working_handle.packet_h );
+		for_ctr = handler_sagdp_is_up_packet_ctr(  working_handle.packet_h );
 		ZEPTO_DEBUG_PRINTF_4( "Packet understood as for %s from device %d (internal: %d)\n", for_ctr ? "CONTROL" : "APP", devices[dev_in_use].device_id, dev_in_use );
 
 		if ( for_ctr )
@@ -526,8 +530,8 @@ wait_for_comm_event:
 						zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
 						zepto_convert_part_of_request_to_response(  working_handle.packet_h, &po, &po1 );
 						zepto_response_to_request(  working_handle.packet_h );
-						uint16_t source_dev_id = 1; // TODO: here we know in context of which device we actually work; use actual data!!! 
-				ZEPTO_DEBUG_PRINTF_1( "         ############  route update reply received  ###########\n" );
+						uint16_t source_dev_id = devices[dev_in_use].device_id; // TODO: here we know in context of which device we actually work; use actual data!!! 
+				ZEPTO_DEBUG_PRINTF_2( "         ############  route update reply received from dev %d  ###########\n", source_dev_id );
 						handler_siot_mesh_process_route_update_response( source_dev_id,  working_handle.packet_h );
 						goto wait_for_comm_event;
 						break;
@@ -686,13 +690,13 @@ client_received:
 		HAL_GET_TIME( &(currt), TIME_REQUEST_POINT__AFTER_SACCP );
 //		gdp_context = SAGDP_CONTEXT_APPLICATION; // TODO: context selection based on caller
 		ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
-		ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_APP, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_app) );
+		ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_APP, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_app), &(working_handle.resend_cnt) );
 		if ( ret_code == SAGDP_RET_NEED_NONCE )
 		{
 			ret_code = handler_sasp_get_packet_id( nonce, &(devices[dev_in_use].sasp_data), devices[dev_in_use].device_id );
 			ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
 //			sa_get_time( &(currt) );
-			ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_APP, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_app) );
+			ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_APP, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_app), &(working_handle.resend_cnt) );
 			ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 		}
 		zepto_response_to_request(  working_handle.packet_h );
@@ -766,7 +770,7 @@ saoudp_send:
 		}
 
 #if 1//SIOT_MESH_IMPLEMENTATION_WORKS
-		ret_code = handler_siot_mesh_send_packet( &currt, &wait_for, devices[dev_in_use].device_id,  working_handle.packet_h, working_handle.resend_cnt, &bus_id ); // currently we know only about a single client with id=1
+		ret_code = handler_siot_mesh_send_packet( for_ctr, &currt, &wait_for, devices[dev_in_use].device_id,  working_handle.packet_h, working_handle.resend_cnt, &bus_id ); // currently we know only about a single client with id=1
 		zepto_response_to_request(  working_handle.packet_h );
 
 		switch ( ret_code )

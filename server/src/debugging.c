@@ -33,7 +33,7 @@ extern bool communication_initialize_with_time_master();
 #ifdef USE_TIME_MASTER
 
 const uint16_t DEVICE_SELF_ID = 0;
-#define MAX_PACKET_SIZE 80
+#define MAX_PACKET_SIZE 200
 
 // record types:
 #define TIME_RECORD_REGISTER_OUTGOING_PACKET 1

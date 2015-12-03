@@ -771,29 +771,32 @@ if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef NEW_UPDATE_PROCESSING
-/*
-#define SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE_TYPE_ERASE_ALL 0
-#define SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE_TYPE_ADD 1
-#define SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE_TYPE_REMOVE 2
-*/
+
+typedef struct _SIOT_MESH_ROUTE_UPDATE
+{
+	bool to_add;
+	SIOT_MESH_ROUTE route;
+} SIOT_MESH_ROUTE_UPDATE; // NOTE: if operation is to remove, only ROUTE_ID is in use
+
+typedef struct _SIOT_MESH_LINK_UPDATE
+{
+	bool to_add;
+	SIOT_MESH_LINK link;
+} SIOT_MESH_LINK_UPDATE; // NOTE: if operation is to remove, only LINK_ID is in use
+
+typedef vector< SIOT_MESH_ROUTE_UPDATE > SIOT_M_ROUTE_TABLE_UPDATE_TYPE;
+typedef vector< SIOT_MESH_LINK_UPDATE > SIOT_M_LINK_TABLE_UPDATE_TYPE;
+
 typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE
 {
 	bool clear_tables_first;
-//	uint8_t operation; // true, if data is to be added
-	// NOTE: in the current implementation updates are either to add or to remove records;
-	//       merging records of different types is not yet supported (TODO: support merging)
-	//       update internal details is subject to chenge;
-	//       Externally exposed is only a (part of a) ccp packet with update data filled which is, in any case, makes sense
 	uint16_t device_id;
 	bool in_progress; // true in the time range between the request to update has been sent, and confirmation is received; before this period requests to the same device can be merged; after the end of this period the request is removed from the set of outstanding requests
-	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table_update_to_add;
-	SIOT_M_LINK_TABLE_TYPE siot_m_link_table_update_to_add;
-	vector<uint16_t> siot_m_route_table_update_to_remove;
-	vector<uint16_t> siot_m_link_table_update_to_remove;
+	SIOT_M_ROUTE_TABLE_UPDATE_TYPE siot_m_route_table_update;
+	SIOT_M_LINK_TABLE_UPDATE_TYPE siot_m_link_table_update;
 	vector<int> affected_routes;
 } SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE;
 
-//typedef vector< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE > SIOT_MESH_ROUTING_DATA_UPDATES;
 typedef list< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE > SIOT_MESH_ALL_ROUTING_DATA_UPDATES;
 typedef list< SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE >::iterator SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR;
 
@@ -801,12 +804,9 @@ SIOT_MESH_ALL_ROUTING_DATA_UPDATES mesh_routing_data_updates;
 
 void siot_mesh_at_root_init_route_update_data( SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE* update/*, uint8_t operation*/, uint16_t device_id, bool clear_tables_first, uint16_t affected_device_id )
 {
-//	update->operation = operation;
 	update->clear_tables_first = clear_tables_first;
-	update->siot_m_link_table_update_to_add.clear();
-	update->siot_m_route_table_update_to_add.clear();
-	update->siot_m_link_table_update_to_remove.clear();
-	update->siot_m_route_table_update_to_remove.clear();
+	update->siot_m_link_table_update.clear();
+	update->siot_m_route_table_update.clear();
 	update->device_id = device_id;
 	update->in_progress = false;
 	update->affected_routes.clear();
@@ -815,12 +815,9 @@ void siot_mesh_at_root_init_route_update_data( SIOT_MESH_DEVICE_ROUTING_DATA_UPD
 
 void siot_mesh_at_root_init_route_update_data_with_many_affected_devices( SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE* update/*, uint8_t operation*/, uint16_t device_id, bool clear_tables_first, const vector<uint16_t>& affected_device_ids )
 {
-//	update->operation = operation;
 	update->clear_tables_first = clear_tables_first;
-	update->siot_m_link_table_update_to_add.clear();
-	update->siot_m_route_table_update_to_add.clear();
-	update->siot_m_link_table_update_to_remove.clear();
-	update->siot_m_route_table_update_to_remove.clear();
+	update->siot_m_link_table_update.clear();
+	update->siot_m_route_table_update.clear();
 	update->device_id = device_id;
 	update->in_progress = false;
 	update->affected_routes.clear();
@@ -830,12 +827,9 @@ void siot_mesh_at_root_init_route_update_data_with_many_affected_devices( SIOT_M
 
 void siot_mesh_at_root_init_route_update_to_erase_all( SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE* update, uint16_t device_id )
 {
-//	update->operation = SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE_TYPE_ERASE_ALL;
 	update->clear_tables_first = true;
-	update->siot_m_link_table_update_to_add.clear();
-	update->siot_m_route_table_update_to_add.clear();
-	update->siot_m_link_table_update_to_remove.clear();
-	update->siot_m_route_table_update_to_remove.clear();
+	update->siot_m_link_table_update.clear();
+	update->siot_m_route_table_update.clear();
 	update->device_id = device_id;
 	update->in_progress = false;
 	update->affected_routes.clear();
@@ -844,7 +838,7 @@ void siot_mesh_at_root_init_route_update_to_erase_all( SIOT_MESH_DEVICE_ROUTING_
 uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE* update ) 
 {
 	// NOTE: in this implementation we assume that an update is either to add or to remove respective items
-	unsigned int total_cnt = update->siot_m_link_table_update_to_add.size() + update->siot_m_route_table_update_to_add.size() +  update->siot_m_link_table_update_to_remove.size() + update->siot_m_route_table_update_to_remove.size();
+	unsigned int total_cnt = update->siot_m_link_table_update.size() + update->siot_m_route_table_update.size();
 	ZEPTO_DEBUG_ASSERT( total_cnt );
 
 	SIOT_MESH_ROUTING_DATA_ITERATOR dev_data;
@@ -859,91 +853,95 @@ uint8_t siot_mesh_at_root_apply_update_to_local_copy( SIOT_MESH_DEVICE_ROUTING_D
 		dev_data->siot_m_link_table.clear();
 	}
 
-	for ( i=0; i<update->siot_m_route_table_update_to_remove.size(); i++ )
+	for ( i=0; i<update->siot_m_route_table_update.size(); i++ )
 	{
-		int ini_sz = dev_data->siot_m_route_table.size();
-		for ( j=0; j<ini_sz; j++ )
-			if ( dev_data->siot_m_route_table[j].TARGET_ID == update->siot_m_route_table_update_to_remove[i] )
+		if ( update->siot_m_route_table_update[i].to_add )
+		{
+			bool applied = false;
+			int ini_sz = dev_data->siot_m_route_table.size();
+			if ( ini_sz == 0 || dev_data->siot_m_route_table[0].TARGET_ID > update->siot_m_route_table_update[i].route.TARGET_ID )
 			{
-				dev_data->siot_m_route_table.erase( dev_data->siot_m_route_table.begin() + j );
-				break;
+				dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin(), update->siot_m_route_table_update[i].route );
+				applied = true;
 			}
-	}
-
-	for ( i=0; i<update->siot_m_route_table_update_to_add.size(); i++ )
-	{
-		bool applied = false;
-		int ini_sz = dev_data->siot_m_route_table.size();
-		if ( ini_sz == 0 || dev_data->siot_m_route_table[0].TARGET_ID > update->siot_m_route_table_update_to_add[i].TARGET_ID )
-		{
-				dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin(), update->siot_m_route_table_update_to_add[i] );
-			applied = true;
-		}
-		if ( !applied )
-		{
-			for ( j=0; j<ini_sz; j++ )
-				if ( dev_data->siot_m_route_table[j].TARGET_ID == update->siot_m_route_table_update_to_add[i].TARGET_ID )
-				{
-						dev_data->siot_m_route_table[j].LINK_ID = update->siot_m_route_table_update_to_add[i].LINK_ID;
-					applied = true;
-					break;
-				}
-				else if ( dev_data->siot_m_route_table[j].TARGET_ID < update->siot_m_route_table_update_to_add[i].TARGET_ID ) // as soon as.... (we exploit canonicity here)
-				{
-						dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin() + j + 1, update->siot_m_route_table_update_to_add[i] );
-					applied = true;
-					break;
-				}
-		}
-		if ( !applied ) // something new
-		{
-			ZEPTO_DEBUG_ASSERT( dev_data->siot_m_route_table.size() == 0 || dev_data->siot_m_route_table[ dev_data->siot_m_route_table.size() - 1 ].TARGET_ID < update->siot_m_route_table_update_to_add[i].TARGET_ID );
-			dev_data->siot_m_route_table.push_back( update->siot_m_route_table_update_to_add[i] );
-		}
-	}
-
-	for ( i=0; i<update->siot_m_link_table_update_to_remove.size(); i++ )
-	{
-		bool applied = false;
-		int ini_sz = dev_data->siot_m_link_table.size();
-		for ( j=0; j<ini_sz; j++ )
-			if ( dev_data->siot_m_link_table[j].LINK_ID == update->siot_m_link_table_update_to_remove[i] )
+			if ( !applied )
 			{
-				dev_data->siot_m_link_table.erase( dev_data->siot_m_link_table.begin() + j );
-				break;
+				for ( j=0; j<ini_sz; j++ )
+					if ( dev_data->siot_m_route_table[j].TARGET_ID == update->siot_m_route_table_update[i].route.TARGET_ID )
+					{
+						dev_data->siot_m_route_table[j].LINK_ID = update->siot_m_route_table_update[i].route.LINK_ID;
+						applied = true;
+						break;
+					}
+					else if ( dev_data->siot_m_route_table[j].TARGET_ID < update->siot_m_route_table_update[i].route.TARGET_ID ) // as soon as.... (we exploit canonicity here)
+					{
+						dev_data->siot_m_route_table.insert( dev_data->siot_m_route_table.begin() + j + 1, update->siot_m_route_table_update[i].route );
+						applied = true;
+						break;
+					}
 			}
+			if ( !applied ) // something new
+			{
+				ZEPTO_DEBUG_ASSERT( dev_data->siot_m_route_table.size() == 0 || dev_data->siot_m_route_table[ dev_data->siot_m_route_table.size() - 1 ].TARGET_ID < update->siot_m_route_table_update[i].route.TARGET_ID );
+				dev_data->siot_m_route_table.push_back( update->siot_m_route_table_update[i].route );
+			}
+		}
+		else
+		{
+			int ini_sz = dev_data->siot_m_route_table.size();
+			for ( j=0; j<ini_sz; j++ )
+				if ( dev_data->siot_m_route_table[j].TARGET_ID == update->siot_m_route_table_update[i].route.TARGET_ID )
+				{
+					dev_data->siot_m_route_table.erase( dev_data->siot_m_route_table.begin() + j );
+					break;
+				}
+		}
 	}
 
-	for ( i=0; i<update->siot_m_link_table_update_to_add.size(); i++ )
+	for ( i=0; i<update->siot_m_link_table_update.size(); i++ )
 	{
-		bool applied = false;
-		int ini_sz = dev_data->siot_m_link_table.size();
-		if ( ini_sz == 0 || dev_data->siot_m_link_table[0].LINK_ID > update->siot_m_link_table_update_to_add[i].LINK_ID )
+		if ( update->siot_m_link_table_update[i].to_add )
 		{
-			dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin(), update->siot_m_link_table_update_to_add[i] );
-			applied = true;
+			bool applied = false;
+			int ini_sz = dev_data->siot_m_link_table.size();
+			if ( ini_sz == 0 || dev_data->siot_m_link_table[0].LINK_ID > update->siot_m_link_table_update[i].link.LINK_ID )
+			{
+				dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin(), update->siot_m_link_table_update[i].link );
+				applied = true;
+			}
+			if ( !applied ) // something new
+			{
+				for ( j=0; j<ini_sz; j++ )
+					if ( dev_data->siot_m_link_table[j].LINK_ID == update->siot_m_link_table_update[i].link.LINK_ID )
+					{
+						dev_data->siot_m_link_table[j].LINK_ID = update->siot_m_link_table_update[i].link.LINK_ID;
+						// TODO: other items
+						applied = true;
+						break;
+					}
+					else if ( dev_data->siot_m_link_table[j].LINK_ID < update->siot_m_link_table_update[i].link.LINK_ID ) // as soon as.... (we exploit canonicity here)
+					{
+						dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin() + j + 1, update->siot_m_link_table_update[i].link );
+						applied = true;
+						break;
+					}
+			}
+			if ( !applied ) // something new
+			{
+				ZEPTO_DEBUG_ASSERT( dev_data->siot_m_link_table.size() == 0 || dev_data->siot_m_link_table[ dev_data->siot_m_link_table.size() - 1 ].LINK_ID < update->siot_m_link_table_update[i].link.LINK_ID );
+				dev_data->siot_m_link_table.push_back( update->siot_m_link_table_update[i].link );
+			}
 		}
-		if ( !applied ) // something new
+		else
 		{
+			bool applied = false;
+			int ini_sz = dev_data->siot_m_link_table.size();
 			for ( j=0; j<ini_sz; j++ )
-				if ( dev_data->siot_m_link_table[j].LINK_ID == update->siot_m_link_table_update_to_add[i].LINK_ID )
+				if ( dev_data->siot_m_link_table[j].LINK_ID == update->siot_m_link_table_update[i].link.LINK_ID )
 				{
-					dev_data->siot_m_link_table[j].LINK_ID = update->siot_m_link_table_update_to_add[i].LINK_ID;
-					// TODO: other items
-					applied = true;
+					dev_data->siot_m_link_table.erase( dev_data->siot_m_link_table.begin() + j );
 					break;
 				}
-				else if ( dev_data->siot_m_link_table[j].LINK_ID < update->siot_m_link_table_update_to_add[i].LINK_ID ) // as soon as.... (we exploit canonicity here)
-				{
-					dev_data->siot_m_link_table.insert( dev_data->siot_m_link_table.begin() + j + 1, update->siot_m_link_table_update_to_add[i] );
-					applied = true;
-					break;
-				}
-		}
-		if ( !applied ) // something new
-		{
-			ZEPTO_DEBUG_ASSERT( dev_data->siot_m_link_table.size() == 0 || dev_data->siot_m_link_table[ dev_data->siot_m_link_table.size() - 1 ].LINK_ID < update->siot_m_link_table_update_to_add[i].LINK_ID );
-			dev_data->siot_m_link_table.push_back( update->siot_m_link_table_update_to_add[i] );
 		}
 	}
 
@@ -957,9 +955,11 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices_when_route_is_added( SIOT_
 
 	SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE update;
 	SIOT_MESH_ROUTING_DATA_ITERATOR rd_it;
-	SIOT_MESH_ROUTE route;
-	SIOT_MESH_LINK link;
-	route.TARGET_ID = id_target;
+	SIOT_MESH_ROUTE_UPDATE route_update;
+	SIOT_MESH_LINK_UPDATE link_update;
+	route_update.to_add = true;
+	route_update.route.TARGET_ID = id_target;
+	link_update.to_add = true;
 	uint16_t dev_id, prev_dev_id;
 	uint16_t i, j;
 	update_list.clear();
@@ -981,8 +981,8 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices_when_route_is_added( SIOT_
 		for ( i=0; i<ini_sz; i++ )
 			if ( rd_it->siot_m_route_table[i].TARGET_ID == id_prev )
 			{
-				route.LINK_ID = rd_it->siot_m_route_table[i].LINK_ID;
-				update.siot_m_route_table_update_to_add.push_back( route );
+				route_update.route.LINK_ID = rd_it->siot_m_route_table[i].LINK_ID;
+				update.siot_m_route_table_update.push_back( route_update );
 				for ( j=0; j<rd_it->siot_m_link_table.size(); j++ )
 					if ( rd_it->siot_m_link_table[j].LINK_ID == rd_it->siot_m_route_table[i].LINK_ID )
 					{
@@ -995,7 +995,7 @@ uint8_t siot_mesh_at_root_get_list_of_updated_devices_when_route_is_added( SIOT_
 					}
 				break;
 			}
-		bool is_update = update.siot_m_link_table_update_to_add.size() || update.siot_m_route_table_update_to_add.size();
+		bool is_update = update.siot_m_link_table_update.size() || update.siot_m_route_table_update.size() || update.clear_tables_first;
 //		ZEPTO_DEBUG_ASSERT( is_update );
 		if ( is_update )
 		{
@@ -1018,20 +1018,20 @@ if ( prev_dev_id == dev_id )
 
 	// adding item for the last retransmitter
 	siot_mesh_at_root_get_device_data( id_prev, rd_it );
-	link.LINK_ID = 0;
+	link_update.link.LINK_ID = 0;
 	for ( j=0; j<rd_it->siot_m_link_table.size(); j++ )
-		if ( link.LINK_ID != rd_it->siot_m_link_table[j].LINK_ID ) // we exploit here canonicity of the link table
+		if ( link_update.link.LINK_ID != rd_it->siot_m_link_table[j].LINK_ID ) // we exploit here canonicity of the link table
 			break;
 		else
-			(link.LINK_ID)++;
-	link.NEXT_HOP = id_target;
-	link.BUS_ID = bust_to_send_from_prev;
+			(link_update.link.LINK_ID)++;
+	link_update.link.NEXT_HOP = id_target;
+	link_update.link.BUS_ID = bust_to_send_from_prev;
 	// TODO: (!!!) MISSING INFORMATION: link other values
-	route.LINK_ID = link.LINK_ID;
+	route_update.route.LINK_ID = link_update.link.LINK_ID;
 	siot_mesh_at_root_init_route_update_data( &update/*, SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE_TYPE_ADD*/, id_prev, false, id_target );
-	update.siot_m_link_table_update_to_add.push_back( link );
-	update.siot_m_route_table_update_to_add.push_back( route);
-	ZEPTO_DEBUG_ASSERT( update.siot_m_link_table_update_to_add.size() || update.siot_m_route_table_update_to_add.size() );
+	update.siot_m_link_table_update.push_back( link_update );
+	update.siot_m_route_table_update.push_back( route_update );
+	ZEPTO_DEBUG_ASSERT( update.siot_m_link_table_update.size() || update.siot_m_route_table_update.size() );
 	if ( id_prev == 0 )
 		siot_mesh_at_root_apply_update_to_local_copy( &update );
 	else
@@ -1039,15 +1039,15 @@ if ( prev_dev_id == dev_id )
 
 	// adding item for the target device
 	// TODO: (!!!) INFORMATION IS MISSING: physics of retransmission
-	link.LINK_ID = 0;
-	link.NEXT_HOP = id_next;
-	link.BUS_ID = bus_to_send_from_target;
-	route.LINK_ID = link.LINK_ID;
-	route.TARGET_ID = 0;
+	link_update.link.LINK_ID = 0;
+	link_update.link.NEXT_HOP = id_next;
+	link_update.link.BUS_ID = bus_to_send_from_target;
+	route_update.route.LINK_ID = link_update.link.LINK_ID;
+	route_update.route.TARGET_ID = 0;
 	siot_mesh_at_root_init_route_update_data( &update/*, SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA_UPDATE_TYPE_ADD*/, id_target, false, id_target );
-	update.siot_m_link_table_update_to_add.push_back( link );
-	update.siot_m_route_table_update_to_add.push_back( route);
-	ZEPTO_DEBUG_ASSERT( update.siot_m_link_table_update_to_add.size() || update.siot_m_route_table_update_to_add.size() );
+	update.siot_m_link_table_update.push_back( link_update );
+	update.siot_m_route_table_update.push_back( route_update );
+	ZEPTO_DEBUG_ASSERT( update.siot_m_link_table_update.size() || update.siot_m_route_table_update.size() );
 	update_list.push_back( update );
 
 	return SIOT_MESH_AT_ROOT_RET_OK;
@@ -1057,15 +1057,10 @@ uint8_t siot_mesh_at_root_add_or_merge_updates_when_route_is_added( SIOT_MESH_AL
 {
 	// we start from the end of the list and add updates one by one;
 	// if an update to the same device is already in the set of updates and is not in progress, we merge updates
-//	int16_t i;
 	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it;
-//	for ( i=update_list.size()-1; i>=0; i-- )
 	for ( it = update_list.begin(); it != update_list.end(); ++it )
 	{
-/*		ZEPTO_DEBUG_ASSERT( update_list[i].siot_m_link_table_update.size() || update_list[i].siot_m_route_table_update.size() );
-		ZEPTO_DEBUG_ASSERT( update_list[i].in_progress == false );
-		mesh_routing_data_updates.push_back( update_list[i] );*/
-		ZEPTO_DEBUG_ASSERT( it->siot_m_link_table_update_to_add.size() || it->siot_m_route_table_update_to_add.size() );
+		ZEPTO_DEBUG_ASSERT( it->siot_m_link_table_update.size() || it->siot_m_route_table_update.size() || it->clear_tables_first );
 		ZEPTO_DEBUG_ASSERT( it->in_progress == false );
 		mesh_routing_data_updates.push_back( *it );
 	}
@@ -1137,46 +1132,48 @@ void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUT
 	zepto_write_uint8( mem_h, 0 );
 	zepto_write_uint8( mem_h, 0 );
 
-	unsigned int total_cnt = update->siot_m_link_table_update_to_add.size() + update->siot_m_route_table_update_to_add.size() +  update->siot_m_link_table_update_to_remove.size() + update->siot_m_route_table_update_to_remove.size();
+	unsigned int total_cnt = update->siot_m_link_table_update.size() + update->siot_m_route_table_update.size();
 	ZEPTO_DEBUG_ASSERT( total_cnt );
 	unsigned int cnt = 0;
 
-	for ( i=0; i<update->siot_m_route_table_update_to_remove.size(); i++ )
+	for ( i=0; i<update->siot_m_route_table_update.size(); i++ )
 	{
-		// | DELETE-ROUTE-ENTRY-AND-TARGET-ID |
 		cnt++;
 		more = cnt == total_cnt ? 0 : 1;
-		header = more | ( DELETE_ROUTE_ENTRY << 1 ) | ( update->siot_m_route_table_update_to_remove[i] << 3 );
-		zepto_parser_encode_and_append_uint16( mem_h, header );
+		if ( update->siot_m_route_table_update[i].to_add )
+		{
+			// | ADD-OR-MODIFY-ROUTE-ENTRY-AND-LINK-ID | TARGET-ID |
+			header = more | ( ADD_OR_MODIFY_ROUTE_ENTRY << 1 ) | ( update->siot_m_route_table_update[i].route.LINK_ID << 3 );
+			zepto_parser_encode_and_append_uint16( mem_h, header );
+			zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_route_table_update[i].route.TARGET_ID );
+		}
+		else
+		{
+			// | DELETE-ROUTE-ENTRY-AND-TARGET-ID |
+			header = more | ( DELETE_ROUTE_ENTRY << 1 ) | ( update->siot_m_route_table_update[i].route.TARGET_ID << 3 );
+			zepto_parser_encode_and_append_uint16( mem_h, header );
+		}
 	}
-	for ( i=0; i<update->siot_m_link_table_update_to_remove.size(); i++ )
-	{
-		// | DELETE-LINK-ENTRY-AND-LINK-ID |
-		cnt++;
-		more = cnt == total_cnt ? 0 : 1;
-		// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
-		header = more | ( DELETE_LINK_ENTRY << 1 ) | ( update->siot_m_route_table_update_to_remove[i] << 4 );
-		zepto_parser_encode_and_append_uint16( mem_h, header );
-	}
-	for ( i=0; i<update->siot_m_route_table_update_to_add.size(); i++ )
-	{
-		// | ADD-OR-MODIFY-ROUTE-ENTRY-AND-LINK-ID | TARGET-ID |
-		cnt++;
-		more = cnt == total_cnt ? 0 : 1;
-		header = more | ( ADD_OR_MODIFY_ROUTE_ENTRY << 1 ) | ( update->siot_m_route_table_update_to_add[i].LINK_ID << 3 );
-		zepto_parser_encode_and_append_uint16( mem_h, header );
-		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_route_table_update_to_add[i].TARGET_ID );
-	}
-	for ( i=0; i<update->siot_m_link_table_update_to_add.size(); i++ )
+
+	for ( i=0; i<update->siot_m_link_table_update.size(); i++ )
 	{
 		cnt++;
 		more = cnt == total_cnt ? 0 : 1;
-		// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
-		header = more | ( ADD_OR_MODIFY_LINK_ENTRY << 1 ) | ( update->siot_m_route_table_update_to_add[i].LINK_ID << 4 );
-		zepto_parser_encode_and_append_uint16( mem_h, header );
-		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update_to_add[i].BUS_ID );
-		zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update_to_add[i].NEXT_HOP );
-		zepto_parser_encode_and_append_uint32( mem_h, 0 ); // intra-bus id
+		if ( update->siot_m_link_table_update[i].to_add )
+		{
+			// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
+			header = more | ( ADD_OR_MODIFY_LINK_ENTRY << 1 ) | ( update->siot_m_link_table_update[i].link.LINK_ID << 4 );
+			zepto_parser_encode_and_append_uint16( mem_h, header );
+			zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].link.BUS_ID );
+			zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].link.NEXT_HOP );
+			zepto_parser_encode_and_append_uint32( mem_h, 0 ); // intra-bus id
+		}
+		else
+		{
+			// | DELETE-LINK-ENTRY-AND-LINK-ID |
+			header = more | ( DELETE_LINK_ENTRY << 1 ) | ( update->siot_m_link_table_update[i].link.LINK_ID << 4 );
+			zepto_parser_encode_and_append_uint16( mem_h, header );
+		}
 	}
 
 	// here we should add resulting checksum
@@ -1299,9 +1296,10 @@ void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t repo
 						if ( updated_dev_data.siot_m_route_table[k].TARGET_ID == non_reached_device_ids[j] ) // ...if one of them corresponds to an entry
 						{
 							killed = true;
-//							SIOT_MESH_ROUTE route;
-//							route.TARGET_ID = non_reached_device_ids[j];
-							update.siot_m_route_table_update_to_remove.push_back( non_reached_device_ids[j] );
+							SIOT_MESH_ROUTE_UPDATE route_update;
+							route_update.to_add = false;
+							route_update.route.TARGET_ID = non_reached_device_ids[j];
+							update.siot_m_route_table_update.push_back( route_update );
 
 							for ( lnk_idx=0; lnk_idx<link_table_size; lnk_idx++ )
 								if ( updated_dev_data.siot_m_link_table[lnk_idx].LINK_ID == link_id )
@@ -1336,16 +1334,17 @@ void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t repo
 				{
 					if ( used_links[k] == 0 )
 					{
-//						SIOT_MESH_LINK link;
-//						link.LINK_ID = updated_dev_data.siot_m_link_table[k].LINK_ID;
-						update.siot_m_link_table_update_to_remove.push_back( updated_dev_data.siot_m_link_table[k].LINK_ID );
+						SIOT_MESH_LINK_UPDATE link_update;
+						link_update.to_add = false;
+						link_update.link.LINK_ID = updated_dev_data.siot_m_link_table[k].LINK_ID;
+						update.siot_m_link_table_update.push_back( link_update );
 					}
 				}
 				if ( used_links != NULL ) delete [] used_links;
 
 				// NOTE: above procedures do not guarantee that the 'update' is not empty
 				// TODO: ensure that empty 'update' is legitimate in all cases
-				if ( update.siot_m_link_table_update_to_remove.size() || update.siot_m_route_table_update_to_remove.size() )
+				if ( update.siot_m_link_table_update.size() || update.siot_m_route_table_update.size() )
 				{
 					if ( update.device_id == 0 ) // root; apply right now
 						siot_mesh_at_root_apply_update_to_local_copy( &update );
@@ -1378,6 +1377,7 @@ void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t repo
 		for ( j=0; j<non_reached_device_ids.size(); j++ )
 		{
 			siot_mesh_at_root_init_route_update_to_erase_all( &update, non_reached_device_ids[j] );
+			mesh_routing_data_updates.push_back( update );
 		}
 	}
 }

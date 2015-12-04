@@ -279,6 +279,7 @@ LAST_HOPS_OF_ALL_DEVICES last_hops_of_all_devices;
 
 void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
 {
+	ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_add_last_hop_in_data( src_id = %d, last_hop_id = %d, last_hop_bus_id = %d, conn_q = %d )\n",  src_id, last_hop_id, last_hop_bus_id, conn_q );
 	SIOT_MESH_LAST_HOP_DATA hop;
 
 	hop.last_hop_id = last_hop_id;
@@ -317,6 +318,7 @@ void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_
 
 void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q )
 {
+	ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_add_last_hop_out_data( src_id = %d, bus_id_at_src = %d, first_receiver_id = %d, conn_q = %d )\n",  src_id, bus_id_at_src, first_receiver_id, conn_q );
 	SIOT_MESH_LAST_HOP_DATA hop;
 
 	hop.last_hop_id = first_receiver_id;
@@ -1052,13 +1054,26 @@ if ( prev_dev_id == dev_id )
 
 	// adding item for the last retransmitter
 	siot_mesh_at_root_get_device_data( id_prev, rd_it );
-	link_update.link.LINK_ID = rd_it->siot_m_link_table.size();
+	bool link_found = false;
 	for ( j=0; j<rd_it->siot_m_link_table.size(); j++ )
-		if ( j < rd_it->siot_m_link_table[j].LINK_ID )
+	{
+		if ( rd_it->siot_m_link_table[j].NEXT_HOP == id_target )
 		{
-			link_update.link.LINK_ID = j;
+			link_update.link.LINK_ID = rd_it->siot_m_link_table[j].LINK_ID;
+			link_found = true;
 			break;
 		}
+	}
+	if ( !link_found )
+	{
+		link_update.link.LINK_ID = rd_it->siot_m_link_table.size();
+		for ( j=0; j<rd_it->siot_m_link_table.size(); j++ )
+			if ( j < rd_it->siot_m_link_table[j].LINK_ID )
+			{
+				link_update.link.LINK_ID = j;
+				break;
+			}
+	}
 	link_update.link.NEXT_HOP = id_target;
 	link_update.link.BUS_ID = bust_to_send_from_prev;
 	// TODO: (!!!) MISSING INFORMATION: link other values
@@ -1185,8 +1200,11 @@ void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUT
 	zepto_parser_encode_and_append_uint16( mem_h, flags );
 
 	// here we should add initial checksum
-	zepto_write_uint8( mem_h, 0 );
-	zepto_write_uint8( mem_h, 0 );
+	if ( !update->clear_tables_first )
+	{
+		zepto_write_uint8( mem_h, 0 );
+		zepto_write_uint8( mem_h, 0 );
+	}
 
 	unsigned int total_cnt = update->siot_m_link_table_update.size() + update->siot_m_route_table_update.size();
 	ZEPTO_DEBUG_ASSERT( total_cnt );
@@ -1221,6 +1239,7 @@ void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUT
 			header = more | ( ADD_OR_MODIFY_LINK_ENTRY << 1 ) | ( update->siot_m_link_table_update[i].link.LINK_ID << 4 );
 			zepto_parser_encode_and_append_uint16( mem_h, header );
 			zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].link.BUS_ID );
+			// TODO: ZEPTO_DEBUG_ASSERT( update->siot_m_link_table_update[i].link.NEXT_HOP < "max. dev. id" )
 			zepto_parser_encode_and_append_uint16( mem_h, update->siot_m_link_table_update[i].link.NEXT_HOP );
 			zepto_parser_encode_and_append_uint32( mem_h, 0 ); // intra-bus id
 		}

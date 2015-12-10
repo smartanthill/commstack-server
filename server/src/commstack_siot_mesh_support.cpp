@@ -97,7 +97,7 @@ void update_fletcher_checksum_16( uint8_t bt, uint16_t* state )
 	*state += tmp;
 }
 
-void update_checksum_with_route_entry( SIOT_MESH_ROUTE* rt, uint16_t* state )
+void update_checksum_with_route_entry( const SIOT_MESH_ROUTE* rt, uint16_t* state )
 {
 	update_fletcher_checksum_16( (uint8_t)(rt->TARGET_ID), state );
 	update_fletcher_checksum_16( (uint8_t)(rt->TARGET_ID >> 8), state );
@@ -105,7 +105,7 @@ void update_checksum_with_route_entry( SIOT_MESH_ROUTE* rt, uint16_t* state )
 	update_fletcher_checksum_16( (uint8_t)(rt->LINK_ID >> 8), state );
 }
 
-void update_checksum_with_link_entry( SIOT_MESH_LINK* lt, uint16_t* state )
+void update_checksum_with_link_entry( const SIOT_MESH_LINK* lt, uint16_t* state )
 {
 	update_fletcher_checksum_16( (uint8_t)(lt->LINK_ID), state );
 	update_fletcher_checksum_16( (uint8_t)(lt->LINK_ID >> 8), state );
@@ -121,7 +121,7 @@ void update_checksum_with_link_entry( SIOT_MESH_LINK* lt, uint16_t* state )
 	update_fletcher_checksum_16( (uint8_t)(lt->INTRA_BUS_ID >> 24), state );*/
 }
 
-uint16_t calculate_table_checksum( SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* dev_data )
+uint16_t calculate_table_checksum( const SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* dev_data )
 {
 	uint16_t ret = 0;
 	uint16_t i;
@@ -134,7 +134,7 @@ uint16_t calculate_table_checksum( SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* dev_dat
 
 ///////////////////   DEBUG and VERIFICATIONS   //////////////////////
 
-void dbg_siot_mesh_at_root_validate_device_tables( SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* data )
+void dbg_siot_mesh_at_root_validate_device_tables( const SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* data )
 {
 #ifdef SA_DEBUG
 	uint16_t i, j;
@@ -1088,6 +1088,7 @@ void siot_mesh_at_root_init_route_update_data( SIOT_MESH_DEVICE_ROUTING_DATA_UPD
 void siot_mesh_at_root_init_route_update_data( SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE_INITIATOR* update, uint16_t device_id, uint16_t affected_device_id )
 {
 	update->device_id = device_id;
+	update->enforce_full_update = false;
 	update->affected_routes.clear();
 	update->affected_routes.push_back(affected_device_id);
 }
@@ -1139,6 +1140,7 @@ void siot_mesh_at_root_init_route_update_data_with_many_affected_devices( SIOT_M
 void siot_mesh_at_root_init_route_update_data_with_many_affected_devices( SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE_INITIATOR* update, uint16_t device_id, const vector<uint16_t>& affected_device_ids )
 {
 	update->device_id = device_id;
+	update->enforce_full_update = false;
 	update->affected_routes.clear();
 	for ( unsigned int i=0; i<affected_device_ids.size(); i++ )
 		update->affected_routes.push_back(affected_device_ids[i]);
@@ -1415,6 +1417,7 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 	SIOT_MESH_LINK_UPDATE link_update;
 
 	update->device_id = dev_data->device_id;
+	update->clear_tables_first = false;
 
 	// route table changes
 	j=0;
@@ -1562,15 +1565,12 @@ dbg_siot_mesh_at_root_validate_device_tables( &dev_data_copy );
 }
 #endif // 0
 
-uint8_t siot_mesh_at_root_build_full_update( SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE* update, uint16_t device_id ) 
+uint8_t siot_mesh_at_root_build_full_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* dev_data, SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE* update ) 
 {
-
-	SIOT_MESH_ROUTING_DATA_ITERATOR dev_data;
-	uint8_t ret_code = siot_mesh_at_root_get_device_data( device_id, dev_data );
-	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK );
 dbg_siot_mesh_at_root_validate_device_tables( &(*dev_data) );
 
 	update->clear_tables_first = true;
+	update->device_id = dev_data->device_id;
 	update->siot_m_route_table_update.clear();
 	update->siot_m_link_table_update.clear();
 
@@ -1820,6 +1820,8 @@ uint8_t siot_mesh_at_root_update_device_data_when_route_is_added( uint16_t id_ta
 
 	// adding item for the target device
 	// TODO: (!!!) INFORMATION IS MISSING: physics of retransmission
+	siot_mesh_at_root_get_device_data( id_target, rd_it );
+	ZEPTO_DEBUG_ASSERT( id_target !=  0 );
 	link.LINK_ID = 0;
 	link.NEXT_HOP = id_next;
 	link.BUS_ID = bus_to_send_from_target;
@@ -1944,13 +1946,19 @@ uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_IT
 		uint8_t ret_code = siot_mesh_at_root_get_device_data( device_id, dev_data );
 		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK );
 
-		SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE update;
+		SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE update_in_progress;
 		if ( it_planned->enforce_full_update )
-			siot_mesh_at_root_get_diff_as_update( &(*dev_data), &update );
+			siot_mesh_at_root_build_full_update( &(*dev_data), &update_in_progress );
 		else
-			siot_mesh_at_root_build_full_update( &update, it_planned->device_id );
+			siot_mesh_at_root_get_diff_as_update( &(*dev_data), &update_in_progress );
 
-		mesh_routing_data_updates_in_progress.push_back( update );
+		unsigned int total_cnt = update_in_progress.siot_m_link_table_update.size() + update_in_progress.siot_m_route_table_update.size();
+		if ( total_cnt == 0 )
+			continue;
+
+		mesh_routing_data_updates_in_progress.push_back( update_in_progress );
+		update = (mesh_routing_data_updates_in_progress.end());
+		--update;
 		planned_updates.erase( it_planned );
 
 		return SIOT_MESH_AT_ROOT_RET_OK;

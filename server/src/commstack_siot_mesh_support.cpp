@@ -124,10 +124,18 @@ void update_checksum_with_link_entry( const SIOT_MESH_LINK* lt, uint16_t* state 
 uint16_t calculate_table_checksum( const SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* dev_data )
 {
 	uint16_t ret = 0;
-	uint16_t i;
-	for ( i=0; i<dev_data->siot_m_route_table_confirmed.size(); i++ )
+	uint16_t i, sz;
+
+	sz = dev_data->siot_m_route_table_confirmed.size();
+	update_fletcher_checksum_16( (uint8_t)sz, &ret );
+	update_fletcher_checksum_16( (uint8_t)(sz >> 8), &ret );
+	for ( i=0; i<sz; i++ )
 		update_checksum_with_route_entry( &(dev_data->siot_m_route_table_confirmed[i]), &ret );
-	for ( i=0; i<dev_data->siot_m_link_table_confirmed.size(); i++ )
+
+	sz = dev_data->siot_m_link_table_confirmed.size();
+	update_fletcher_checksum_16( (uint8_t)sz, &ret );
+	update_fletcher_checksum_16( (uint8_t)(sz >> 8), &ret );
+	for ( i=0; i<sz; i++ )
 		update_checksum_with_link_entry( &(dev_data->siot_m_link_table_confirmed[i]), &ret );
 	return ret;
 }
@@ -1206,12 +1214,15 @@ void siot_mesh_at_root_apply_update_to_device_routing_data( const SIOT_MESH_DEVI
 		else
 		{
 			int ini_sz = dev_data->siot_m_route_table_confirmed.size();
+			bool applied = false;
 			for ( j=0; j<ini_sz; j++ )
 				if ( dev_data->siot_m_route_table_confirmed[j].TARGET_ID == update->siot_m_route_table_update[i].route.TARGET_ID )
 				{
 					dev_data->siot_m_route_table_confirmed.erase( dev_data->siot_m_route_table_confirmed.begin() + j );
+					applied = true;
 					break;
 				}
+			ZEPTO_DEBUG_ASSERT( applied );
 		}
 	}
 
@@ -1257,8 +1268,10 @@ void siot_mesh_at_root_apply_update_to_device_routing_data( const SIOT_MESH_DEVI
 				if ( dev_data->siot_m_link_table_confirmed[j].LINK_ID == update->siot_m_link_table_update[i].link.LINK_ID )
 				{
 					dev_data->siot_m_link_table_confirmed.erase( dev_data->siot_m_link_table_confirmed.begin() + j );
+					applied = true;
 					break;
 				}
+			ZEPTO_DEBUG_ASSERT( applied );
 		}
 	}
 }
@@ -1496,35 +1509,36 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 		link_update.link = dev_data->siot_m_link_table_planned[i];
 		update->siot_m_link_table_update.push_back( link_update );
 	}
-#if 0
+
 #ifdef SA_DEBUG
 	// let's check whether we're right
-	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA dev_data;
-	dev_data.device_id = curr_dev_data->device_id;
-	dev_data.siot_m_link_table = dev_data->siot_m_link_table_confirmed;
-	dev_data.siot_m_route_table = dev_data->siot_m_route_table_confirmed;
-	dev_data.bus_type_list = curr_dev_data->bus_type_list;
-	dev_data.is_retransmitter = curr_dev_data->is_retransmitter;
+	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA test_dev_data;
+	test_dev_data.device_id = dev_data->device_id;
+	test_dev_data.siot_m_link_table_planned = dev_data->siot_m_link_table_planned;
+	test_dev_data.siot_m_route_table_planned = dev_data->siot_m_route_table_planned;
+	test_dev_data.siot_m_link_table_confirmed = dev_data->siot_m_link_table_confirmed;
+	test_dev_data.siot_m_route_table_confirmed = dev_data->siot_m_route_table_confirmed;
+	test_dev_data.bus_type_list = dev_data->bus_type_list;
+	test_dev_data.is_retransmitter = dev_data->is_retransmitter;
 
-	siot_mesh_at_root_apply_update_to_device_routing_data( update, &dev_data );
+	siot_mesh_at_root_apply_update_to_device_routing_data( update, &test_dev_data );
 
-	ZEPTO_DEBUG_ASSERT( dev_data.siot_m_route_table.size() == dev_data->siot_m_route_table_planned.size() );
-	for ( i=0; i<dev_data.siot_m_route_table.size(); i++ )
+	ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_route_table_confirmed.size() == test_dev_data.siot_m_route_table_planned.size() );
+	for ( i=0; i<test_dev_data.siot_m_route_table_confirmed.size(); i++ )
 	{
-		ZEPTO_DEBUG_ASSERT( dev_data.siot_m_route_table[i].TARGET_ID == dev_data->siot_m_route_table_planned[i].TARGET_ID );
-		ZEPTO_DEBUG_ASSERT( dev_data.siot_m_route_table[i].LINK_ID == dev_data->siot_m_route_table_planned[i].LINK_ID );
+		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_route_table_confirmed[i].TARGET_ID == dev_data->siot_m_route_table_planned[i].TARGET_ID );
+		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_route_table_confirmed[i].LINK_ID == dev_data->siot_m_route_table_planned[i].LINK_ID );
 	}
 
-	ZEPTO_DEBUG_ASSERT( dev_data.siot_m_link_table.size() == dev_data->siot_m_link_table_planned.size() );
-	for ( i=0; i<dev_data.siot_m_link_table.size(); i++ )
+	ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_link_table_confirmed.size() == dev_data->siot_m_link_table_planned.size() );
+	for ( i=0; i<test_dev_data.siot_m_link_table_confirmed.size(); i++ )
 	{
-		ZEPTO_DEBUG_ASSERT( dev_data.siot_m_link_table[i].LINK_ID == dev_data->siot_m_link_table_planned[i].LINK_ID );
-		ZEPTO_DEBUG_ASSERT( dev_data.siot_m_link_table[i].BUS_ID == dev_data->siot_m_link_table_planned[i].BUS_ID );
-		ZEPTO_DEBUG_ASSERT( dev_data.siot_m_link_table[i].NEXT_HOP == dev_data->siot_m_link_table_planned[i].NEXT_HOP );
-		ZEPTO_DEBUG_ASSERT( dev_data.siot_m_link_table[i].INTRA_BUS_ID == dev_data->siot_m_link_table_planned[i].INTRA_BUS_ID );
+		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_link_table_confirmed[i].LINK_ID == dev_data->siot_m_link_table_planned[i].LINK_ID );
+		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_link_table_confirmed[i].BUS_ID == dev_data->siot_m_link_table_planned[i].BUS_ID );
+		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_link_table_confirmed[i].NEXT_HOP == dev_data->siot_m_link_table_planned[i].NEXT_HOP );
+		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_link_table_confirmed[i].INTRA_BUS_ID == dev_data->siot_m_link_table_planned[i].INTRA_BUS_ID );
 	}
 #endif // SA_DEBUG
-#endif
 }
 
 #if 0
@@ -2063,7 +2077,7 @@ uint8_t siot_mesh_at_root_update_done( uint16_t device_id )
 	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it;
 	for ( it = mesh_routing_data_updates_in_progress.begin(); it != mesh_routing_data_updates_in_progress.end(); ++it )
 //		if ( it->device_id == device_id && it->in_progress ) // note: while current update was 'in progress', other updates of the same device could be added to the collection; and they could not be merged with one already being in progress; thus they will stay with status !in_progress
-		if ( it->device_id == device_id ) // note: while current update was 'in progress', other updates of the same device could be added to the collection; and they could not be merged with one already being in progress; thus they will stay with status !in_progress
+		if ( it->device_id == device_id )
 		{
 #if 0
 #ifdef SA_DEBUG
@@ -2240,9 +2254,10 @@ dbg_siot_mesh_at_root_validate_all_device_tables();
 					link_update.to_add = false;
 					link_update.link.LINK_ID = updated_dev_data.siot_m_link_table_planned[k].LINK_ID;
 					update.siot_m_link_table_update_planned.push_back( link_update );*/
-					siot_mesh_at_root_remove_link( &(updated_dev_data.siot_m_link_table_planned), updated_dev_data.siot_m_link_table_planned[k].LINK_ID );
+					uint16_t link_to_remove = updated_dev_data.siot_m_link_table_planned[k].LINK_ID;
+					siot_mesh_at_root_remove_link( &(updated_dev_data.siot_m_link_table_planned), link_to_remove );
 					if ( updated_dev_data.device_id == 0 )
-						siot_mesh_at_root_remove_link( &(updated_dev_data.siot_m_link_table_confirmed), updated_dev_data.siot_m_link_table_planned[k].LINK_ID );
+						siot_mesh_at_root_remove_link( &(updated_dev_data.siot_m_link_table_confirmed), link_to_remove );
 				}
 			}
 			if ( used_links != NULL ) delete [] used_links;
@@ -2334,12 +2349,20 @@ dbg_siot_mesh_at_root_validate_all_device_tables();
 
 bool siot_mesh_at_root_is_route_under_update( uint16_t device_id )
 {
-	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it;
 	unsigned int i;
+
+	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it;
 	for ( it = mesh_routing_data_updates_in_progress.begin(); it != mesh_routing_data_updates_in_progress.end(); ++it ) 
 		for ( i=0; i<it->affected_routes.size(); i++ )
 			if ( it->affected_routes[i] == device_id )
 				return true;
+
+	SIOT_MESH_ALL_ROUTING_DATA_UPDATE_INITIATORS_ITERATOR it1;
+	for ( it1 = planned_updates.begin(); it1 != planned_updates.end(); ++it1 ) 
+		for ( i=0; i<it1->affected_routes.size(); i++ )
+			if ( it1->affected_routes[i] == device_id )
+				return true;
+
 	return false;
 }
 

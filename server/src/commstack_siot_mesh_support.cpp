@@ -1200,7 +1200,7 @@ void siot_mesh_at_root_apply_update_to_device_routing_data( const SIOT_MESH_DEVI
 					}
 					else if ( dev_data->siot_m_route_table_confirmed[j].TARGET_ID > update->siot_m_route_table_update[i].route.TARGET_ID ) // as soon as.... (we exploit canonicity here)
 					{
-						dev_data->siot_m_route_table_confirmed.insert( dev_data->siot_m_route_table_confirmed.begin() + j + 1, update->siot_m_route_table_update[i].route );
+						dev_data->siot_m_route_table_confirmed.insert( dev_data->siot_m_route_table_confirmed.begin() + j, update->siot_m_route_table_update[i].route );
 						applied = true;
 						break;
 					}
@@ -1249,7 +1249,7 @@ void siot_mesh_at_root_apply_update_to_device_routing_data( const SIOT_MESH_DEVI
 					}
 					else if ( dev_data->siot_m_link_table_confirmed[j].LINK_ID > update->siot_m_link_table_update[i].link.LINK_ID ) // as soon as.... (we exploit canonicity here)
 					{
-						dev_data->siot_m_link_table_confirmed.insert( dev_data->siot_m_link_table_confirmed.begin() + j + 1, update->siot_m_link_table_update[i].link );
+						dev_data->siot_m_link_table_confirmed.insert( dev_data->siot_m_link_table_confirmed.begin() + j, update->siot_m_link_table_update[i].link );
 						applied = true;
 						break;
 					}
@@ -1448,14 +1448,18 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 		{
 			j++;
 		}
-		else while ( dev_data->siot_m_route_table_confirmed[i].TARGET_ID > dev_data->siot_m_route_table_planned[j].TARGET_ID ) // a new one
+		else 
 		{
-			route_update.to_add = true;
-			route_update.route = dev_data->siot_m_route_table_planned[i];
-			update->siot_m_route_table_update.push_back( route_update );
-			j++;
-			if ( j >= dev_data->siot_m_route_table_planned.size() )
-				break;
+			while ( dev_data->siot_m_route_table_confirmed[i].TARGET_ID > dev_data->siot_m_route_table_planned[j].TARGET_ID ) // a new one
+			{
+				route_update.to_add = true;
+				route_update.route = dev_data->siot_m_route_table_planned[i];
+				update->siot_m_route_table_update.push_back( route_update );
+				j++;
+				if ( j >= dev_data->siot_m_route_table_planned.size() )
+					break;
+			}
+			i--; // repeat with the same value of 'i' and other values of 'j' again
 		}
 	}
 	for ( ; i<dev_data->siot_m_route_table_confirmed.size(); i++ )
@@ -1467,7 +1471,7 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 	for ( ; j<dev_data->siot_m_route_table_planned.size(); j++ )
 	{
 		route_update.to_add = true;
-		route_update.route = dev_data->siot_m_route_table_planned[i];
+		route_update.route = dev_data->siot_m_route_table_planned[j];
 		update->siot_m_route_table_update.push_back( route_update );
 	}
 
@@ -1487,14 +1491,18 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 		{
 			j++;
 		}
-		else while ( dev_data->siot_m_link_table_confirmed[i].LINK_ID > dev_data->siot_m_link_table_planned[j].LINK_ID ) // a new one
+		else 
 		{
-			link_update.to_add = true;
-			link_update.link = dev_data->siot_m_link_table_planned[i];
-			update->siot_m_link_table_update.push_back( link_update );
-			j++;
-			if ( j >= dev_data->siot_m_link_table_planned.size() )
-				break;
+			while ( dev_data->siot_m_link_table_confirmed[i].LINK_ID > dev_data->siot_m_link_table_planned[j].LINK_ID ) // a new one
+			{
+				link_update.to_add = true;
+				link_update.link = dev_data->siot_m_link_table_planned[i];
+				update->siot_m_link_table_update.push_back( link_update );
+				j++;
+				if ( j >= dev_data->siot_m_link_table_planned.size() )
+					break;
+			}
+			i--; // repeat with the same value of 'i' and other values of 'j' again
 		}
 	}
 	for ( ; i<dev_data->siot_m_link_table_confirmed.size(); i++ )
@@ -1506,7 +1514,7 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 	for ( ; j<dev_data->siot_m_link_table_planned.size(); j++ )
 	{
 		link_update.to_add = true;
-		link_update.link = dev_data->siot_m_link_table_planned[i];
+		link_update.link = dev_data->siot_m_link_table_planned[j];
 		update->siot_m_link_table_update.push_back( link_update );
 	}
 

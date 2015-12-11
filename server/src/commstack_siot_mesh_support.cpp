@@ -54,8 +54,7 @@ typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA // used to keep copies of r
 {
 	uint16_t device_id;
 	bool is_retransmitter;
-//	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table;
-//	SIOT_M_LINK_TABLE_TYPE siot_m_link_table;
+	uint16_t last_from_santa_request_id;
 	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table_confirmed;
 	SIOT_M_LINK_TABLE_TYPE siot_m_link_table_confirmed;
 	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table_planned;
@@ -284,6 +283,7 @@ void siot_mesh_init_tables()  // TODO: this call reflects current development st
 	// 0. Root device
 	data.device_id = 0;
 	data.is_retransmitter = false;
+	data.last_from_santa_request_id = 0;
 	data.bus_type_list.push_back( 1 );
 	mesh_routing_data.push_back( data );
 	mesh_routing_data_being_constructed.push_back( data );
@@ -291,6 +291,7 @@ void siot_mesh_init_tables()  // TODO: this call reflects current development st
 	// 1. retransmitter
 	data.device_id = 1;
 	data.is_retransmitter = true;
+	data.last_from_santa_request_id = 0;
 	data.bus_type_list.clear();
 	data.bus_type_list.push_back( 0 );
 	data.bus_type_list.push_back( 1 );
@@ -299,6 +300,7 @@ void siot_mesh_init_tables()  // TODO: this call reflects current development st
 
 	// 2-5. terminating
 	data.is_retransmitter = false;
+	data.last_from_santa_request_id = 0;
 	data.device_id = 2;
 	data.bus_type_list.clear();
 	data.bus_type_list.push_back( 0 );
@@ -500,6 +502,8 @@ typedef vector< SIOT_MESH_LAST_HOP_DATA > LAST_HOPS;
 typedef struct _DEVICE_LAST_HOPS
 {
 	uint16_t device_id;
+	uint16_t request_id;
+	sa_time_val end_of_receiving;
 	LAST_HOPS last_hops_in;
 	LAST_HOPS last_hops_out;
 } DEVICE_LAST_HOPS;
@@ -507,11 +511,16 @@ typedef struct _DEVICE_LAST_HOPS
 typedef vector< DEVICE_LAST_HOPS > LAST_HOPS_OF_ALL_DEVICES;
 
 LAST_HOPS_OF_ALL_DEVICES last_hops_of_all_devices;
+static uint16_t from_santa_request_id = 0;
 
-void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
+uint16_t get_next_from_santa_request_id() {return ++from_santa_request_id; }
+bool is_from_santa_request_id_less_eq( uint16_t prev_id, uint16_t new_id ) {return ((uint16_t)( new_id - prev_id  )) < (uint16_t)0x8000; }
+
+void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
 {
 	ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_add_last_hop_in_data( src_id = %d, last_hop_id = %d, last_hop_bus_id = %d, conn_q = %d )\n",  src_id, last_hop_id, last_hop_bus_id, conn_q );
 	SIOT_MESH_LAST_HOP_DATA hop;
+	SIOT_MESH_ROUTING_DATA_ITERATOR it;
 
 	hop.last_hop_id = last_hop_id;
 	hop.last_hop_bus_id = last_hop_bus_id;
@@ -522,7 +531,10 @@ void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_
 	bool found = false;
 	int ini_sz = last_hops_of_all_devices.size();
 	for ( i=0; i<ini_sz; i++ )
-		if ( last_hops_of_all_devices[i].device_id == src_id )
+	{
+		uint8_t ret_code = siot_mesh_at_root_get_device_data( src_id, it );
+		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: consider a case when src_id points to nothing (note that it come over a network!)
+		if ( last_hops_of_all_devices[i].device_id == src_id/* && request_id == it->last_from_santa_request_id*/ )
 		{
 			// we assume that device returns the same info no matter which way it arrives
 			bool found2 = false;
@@ -538,19 +550,32 @@ void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_
 			found = true;
 			break;
 		}
+	}
+
 	if ( !found )
 	{
+		uint8_t ret_code = siot_mesh_at_root_get_device_data( src_id, it );
+		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: consider a case when src_id points to nothing (note that it come over a network!)
+		if ( is_from_santa_request_id_less_eq( request_id, it->last_from_santa_request_id ) )
+			return; // unlucky guy... nj late to come...
+		it->last_from_santa_request_id = request_id;
 		DEVICE_LAST_HOPS dev_hops;
 		dev_hops.device_id = src_id;
+		dev_hops.request_id = request_id;
+		sa_time_val diff_tval;
+		TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RECEIVING_HOPS_PERIOD_MS, diff_tval );
+		sa_hal_time_val_copy_from( &(dev_hops.end_of_receiving), currt );
+		SA_TIME_INCREMENT_BY_TICKS( dev_hops.end_of_receiving, diff_tval );
 		dev_hops.last_hops_in.push_back( hop );
 		last_hops_of_all_devices.push_back( dev_hops );
 	}
 }
 
-void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q )
+void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q )
 {
 	ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_add_last_hop_out_data( src_id = %d, bus_id_at_src = %d, first_receiver_id = %d, conn_q = %d )\n",  src_id, bus_id_at_src, first_receiver_id, conn_q );
 	SIOT_MESH_LAST_HOP_DATA hop;
+	SIOT_MESH_ROUTING_DATA_ITERATOR it;
 
 	hop.last_hop_id = first_receiver_id;
 	hop.last_hop_bus_id = bus_id_at_src;
@@ -561,7 +586,10 @@ void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_a
 	bool found = false;
 	int ini_sz = last_hops_of_all_devices.size();
 	for ( i=0; i<ini_sz; i++ )
-		if ( last_hops_of_all_devices[i].device_id == src_id )
+	{
+		uint8_t ret_code = siot_mesh_at_root_get_device_data( src_id, it );
+		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: consider a case when src_id points to nothing (note that it come over a network!)
+		if ( last_hops_of_all_devices[i].device_id == src_id/* && request_id == it->last_from_santa_request_id*/ )
 		{
 			// we assume that device returns the same info no matter which way it arrives
 			bool found2 = false;
@@ -577,10 +605,20 @@ void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_a
 			found = true;
 			break;
 		}
+	}
 	if ( !found )
 	{
+		uint8_t ret_code = siot_mesh_at_root_get_device_data( src_id, it );
+		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: consider a case when src_id points to nothing (note that it come over a network!)
+		if ( request_id <= it->last_from_santa_request_id )
+			return; // unlucky guy... nj late to come...
 		DEVICE_LAST_HOPS dev_hops;
 		dev_hops.device_id = src_id;
+		dev_hops.request_id = request_id;
+		sa_time_val diff_tval;
+		TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
+		sa_hal_time_val_copy_from( &(dev_hops.end_of_receiving), currt );
+		SA_TIME_INCREMENT_BY_TICKS( dev_hops.end_of_receiving, diff_tval );
 		dev_hops.last_hops_in.push_back( hop );
 		last_hops_of_all_devices.push_back( dev_hops );
 	}
@@ -591,50 +629,86 @@ void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_a
 #define SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
 #define SIOT_MESH_IS_QUALITY_OF_FIRST_INOUT_CONNECTION_BETTER( in1, out1, in2, out2 ) ( (in1<in2)||((in1==in2)&&(out1<out2)) ) /*TODO: this is a quick solution; think about better ones*/
 
-uint8_t siot_mesh_at_root_find_best_route_to_device( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
+uint8_t siot_mesh_at_root_find_best_route_to_device( const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
 {
+dbg_siot_mesh_at_root_validate_all_device_tables();
+static uint16_t ctr = 0;
+ctr++;
+ZEPTO_DEBUG_PRINTF_3( "*** ctr--siot_mesh_at_root_find_best_route_to_device = %d, last_hops_of_all_devices.size() = %d ***\n", ctr, last_hops_of_all_devices.size() );
+/*if ( ctr == 2897 )
+{
+	ctr = ctr;
+}*/
+	if ( last_hops_of_all_devices.size() == 0 )
+		return SIOT_MESH_AT_ROOT_RET_FAILED;
+
 	uint16_t i, j, k;
 	uint16_t last_in, last_out;
 	uint16_t match_cnt = 0;
-	for ( i=0; i<last_hops_of_all_devices.size(); i++ )
-		if ( last_hops_of_all_devices[i].device_id == target_id )
+	uint8_t ret = SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NOT_NOW;
+	bool restart;
+	do
+	{
+		restart = false; // will be true in case of erasing not because of success
+		for ( i=0; i<last_hops_of_all_devices.size(); i++ )
 		{
-			if ( last_hops_of_all_devices[i].last_hops_in.size() == 0 || last_hops_of_all_devices[i].last_hops_out.size() == 0 )
-				return SIOT_MESH_AT_ROOT_RET_FAILED;
+	//		if ( last_hops_of_all_devices[i].device_id == target_id )
+			if ( sa_hal_time_val_is_less_eq( &(last_hops_of_all_devices[i].end_of_receiving), currt ) ) // receiving period is over
+			{
+				if ( last_hops_of_all_devices[i].last_hops_in.size() == 0 || last_hops_of_all_devices[i].last_hops_out.size() == 0 )
+				{
+					restart = true;
+					last_hops_of_all_devices.erase( last_hops_of_all_devices.begin() + i );
+					break;
+				}
 
-			for ( j=0; j<last_hops_of_all_devices[i].last_hops_in.size(); j++ )
-				if ( SIOT_MESH_IS_QUALITY_OF_INCOMING_CONNECTION_ADMISSIBLE( last_hops_of_all_devices[i].last_hops_in[j].conn_quality ) )
-					for ( k=0; k<last_hops_of_all_devices[i].last_hops_out.size(); k++ )
-						if ( ( last_hops_of_all_devices[i].last_hops_in[j].last_hop_id == last_hops_of_all_devices[i].last_hops_out[k].last_hop_id ) && SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( last_hops_of_all_devices[i].last_hops_out[k].conn_quality ) )
-							if ( match_cnt == 0 || SIOT_MESH_IS_QUALITY_OF_FIRST_INOUT_CONNECTION_BETTER( last_hops_of_all_devices[i].last_hops_in[j].conn_quality, last_hops_of_all_devices[i].last_hops_out[k].conn_quality, last_hops_of_all_devices[i].last_hops_in[last_in].conn_quality, last_hops_of_all_devices[i].last_hops_out[last_out].conn_quality ) )
-							{
-								last_in = i;
-								last_out = j;
-								*id_prev = last_hops_of_all_devices[i].last_hops_in[j].last_hop_id;
-								*id_next = last_hops_of_all_devices[i].last_hops_out[k].last_hop_id;
-								*bus_id_at_target = last_hops_of_all_devices[i].last_hops_out[k].last_hop_bus_id;
-								*bus_id_at_prev = last_hops_of_all_devices[i].last_hops_in[j].last_hop_bus_id;
-								match_cnt++;
-							}
-			if ( match_cnt != 0 )
-				return SIOT_MESH_AT_ROOT_RET_OK;
-			else
-				return SIOT_MESH_AT_ROOT_RET_FAILED;
+				*target_id = last_hops_of_all_devices[i].device_id;
+
+				for ( j=0; j<last_hops_of_all_devices[i].last_hops_in.size(); j++ )
+					if ( SIOT_MESH_IS_QUALITY_OF_INCOMING_CONNECTION_ADMISSIBLE( last_hops_of_all_devices[i].last_hops_in[j].conn_quality ) )
+						for ( k=0; k<last_hops_of_all_devices[i].last_hops_out.size(); k++ )
+							if ( ( last_hops_of_all_devices[i].last_hops_in[j].last_hop_id == last_hops_of_all_devices[i].last_hops_out[k].last_hop_id ) && SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( last_hops_of_all_devices[i].last_hops_out[k].conn_quality ) )
+								if ( match_cnt == 0 || SIOT_MESH_IS_QUALITY_OF_FIRST_INOUT_CONNECTION_BETTER( last_hops_of_all_devices[i].last_hops_in[j].conn_quality, last_hops_of_all_devices[i].last_hops_out[k].conn_quality, last_hops_of_all_devices[i].last_hops_in[last_in].conn_quality, last_hops_of_all_devices[i].last_hops_out[last_out].conn_quality ) )
+								{
+									last_in = i;
+									last_out = j;
+									*id_prev = last_hops_of_all_devices[i].last_hops_in[j].last_hop_id;
+									*id_next = last_hops_of_all_devices[i].last_hops_out[k].last_hop_id;
+									*bus_id_at_target = last_hops_of_all_devices[i].last_hops_out[k].last_hop_bus_id;
+									*bus_id_at_prev = last_hops_of_all_devices[i].last_hops_in[j].last_hop_bus_id;
+									match_cnt++;
+								}
+				if ( match_cnt != 0 )
+				{
+					ret = SIOT_MESH_AT_ROOT_RET_OK;
+					last_hops_of_all_devices.erase( last_hops_of_all_devices.begin() + i );
+					restart = false;
+					break;
+				}
+				else
+				{
+					last_hops_of_all_devices.erase( last_hops_of_all_devices.begin() + i );
+					restart = true;
+					break;
+				}
+			}
 		}
+	}
+	while ( restart );
 
 	// TODO: consider more relaxed matches...
+	for ( i=0; i<last_hops_of_all_devices.size(); i++ )
+		sa_hal_time_val_get_remaining_time( currt, &(last_hops_of_all_devices[i].end_of_receiving), time_to_next_event );
 
-	return SIOT_MESH_AT_ROOT_RET_FAILED;
+	return ret;
 }
 
-uint8_t siot_mesh_at_root_find_best_route( uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
+uint8_t siot_mesh_at_root_find_best_route( const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
 {
-	if ( last_hops_of_all_devices.size() == 0 )
-		return SIOT_MESH_AT_ROOT_RET_FAILED;
-	*target_id = last_hops_of_all_devices[0].device_id; // TODO: we may want to try all possibilities, not just the first one
-	return siot_mesh_at_root_find_best_route_to_device( *target_id, bus_id_at_target, id_prev, bus_id_at_prev, id_next );
+//	*target_id = last_hops_of_all_devices[0].device_id; // TODO: we may want to try all possibilities, not just the first one
+	return siot_mesh_at_root_find_best_route_to_device( currt, time_to_next_event, target_id, bus_id_at_target, id_prev, bus_id_at_prev, id_next );
 }
-
+/*
 uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id )
 {
 	uint16_t i;
@@ -647,7 +721,7 @@ uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id )
 
 	return SIOT_MESH_AT_ROOT_RET_FAILED;
 }
-
+*/
 //////////////////////////////////////////////////////////////////////////////////////////////////
 // pending mesh-level resends
 
@@ -924,8 +998,7 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 	// (will be added later);
 
 	// REQUEST-ID
-	static uint16_t rq_id = 0; // REQUEST-ID
-	rq_id++; // TODO: make true global; TODO: think whether this id is globally or per-device unique
+	uint16_t rq_id = get_next_from_santa_request_id();
 	// (will be added later);
 
 	// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it

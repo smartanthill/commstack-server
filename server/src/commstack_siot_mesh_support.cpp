@@ -1517,8 +1517,14 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 			route_update.route.TARGET_ID = dev_data->siot_m_route_table_confirmed[i].TARGET_ID;
 			update->siot_m_route_table_update.push_back( route_update );
 		}
-		else if ( dev_data->siot_m_route_table_confirmed[i].TARGET_ID == dev_data->siot_m_route_table_planned[j].TARGET_ID ) // no changes
+		else if ( dev_data->siot_m_route_table_confirmed[i].TARGET_ID == dev_data->siot_m_route_table_planned[j].TARGET_ID )
 		{
+			if ( dev_data->siot_m_route_table_confirmed[i].LINK_ID != dev_data->siot_m_route_table_planned[j].LINK_ID ) // update required
+			{
+				route_update.to_add = true;
+				route_update.route = dev_data->siot_m_route_table_planned[i];
+				update->siot_m_route_table_update.push_back( route_update );
+			}
 			j++;
 		}
 		else 
@@ -1562,6 +1568,13 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 		}
 		else if ( dev_data->siot_m_link_table_confirmed[i].LINK_ID == dev_data->siot_m_link_table_planned[j].LINK_ID ) // no changes
 		{
+			bool same = ZEPTO_MEMCMP( &(dev_data->siot_m_link_table_confirmed[i]), &(dev_data->siot_m_link_table_planned[j]), sizeof (SIOT_MESH_LINK) ) == 0;
+			if ( !same )
+			{
+				link_update.to_add = true;
+				link_update.link = dev_data->siot_m_link_table_planned[i];
+				update->siot_m_link_table_update.push_back( link_update );
+			}
 			j++;
 		}
 		else 
@@ -2035,7 +2048,10 @@ uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_IT
 				break;
 			}
 		if ( in_progress )
+		{
+			++it_planned;
 			continue;
+		}
 
 		SIOT_MESH_ROUTING_DATA_ITERATOR dev_data;
 		uint8_t ret_code = siot_mesh_at_root_get_device_data( device_id, dev_data );
@@ -2049,7 +2065,20 @@ uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_IT
 
 		unsigned int total_cnt = update_in_progress.siot_m_link_table_update.size() + update_in_progress.siot_m_route_table_update.size();
 		if ( total_cnt == 0 )
+		{
+			if ( !it_planned->enforce_full_update )
+			{
+				it_planned_next = it_planned;
+				++it_planned_next;
+				planned_updates.erase( it_planned );
+				it_planned = it_planned_next;
+			}
+			else
+			{
+				++it_planned;
+			}
 			continue;
+		}
 
 		mesh_routing_data_updates_in_progress.push_back( update_in_progress );
 		update = (mesh_routing_data_updates_in_progress.end());

@@ -1315,7 +1315,7 @@ void siot_mesh_at_root_apply_update_to_device_routing_data( const SIOT_MESH_DEVI
 				for ( j=0; j<ini_sz; j++ )
 					if ( dev_data->siot_m_link_table_confirmed[j].LINK_ID == update->siot_m_link_table_update[i].link.LINK_ID )
 					{
-						dev_data->siot_m_link_table_confirmed[j].LINK_ID = update->siot_m_link_table_update[i].link.LINK_ID;
+						dev_data->siot_m_link_table_confirmed[j] = update->siot_m_link_table_update[i].link;
 						// TODO: other items
 						applied = true;
 						break;
@@ -2034,10 +2034,10 @@ uint8_t siot_mesh_at_root_get_next_update( SIOT_MESH_ALL_ROUTING_DATA_UPDATES_IT
 	if ( planned_updates.begin() == planned_updates.end() )
 		return SIOT_MESH_AT_ROOT_RET_NO_UPDATES;
 
-	SIOT_MESH_ALL_ROUTING_DATA_UPDATE_INITIATORS_ITERATOR it_planned;
+	SIOT_MESH_ALL_ROUTING_DATA_UPDATE_INITIATORS_ITERATOR it_planned=planned_updates.begin(), it_planned_next;
 	SIOT_MESH_ALL_ROUTING_DATA_UPDATES_ITERATOR it_initiated;
 
-	for ( it_planned=planned_updates.begin(); it_planned!=planned_updates.end(); ++it_planned )
+	while ( it_planned!=planned_updates.end() )
 	{
 		uint16_t device_id = it_planned->device_id;
 		bool in_progress = false;

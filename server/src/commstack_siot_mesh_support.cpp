@@ -1451,7 +1451,7 @@ if ( ctr == 1573 )
 			if ( dev_data->siot_m_route_table_confirmed[i].LINK_ID != dev_data->siot_m_route_table_planned[j].LINK_ID ) // update required
 			{
 				route_update.to_add = true;
-				route_update.route = dev_data->siot_m_route_table_planned[i];
+				route_update.route = dev_data->siot_m_route_table_planned[j];
 				update->siot_m_route_table_update.push_back( route_update );
 			}
 			j++;
@@ -1461,7 +1461,7 @@ if ( ctr == 1573 )
 			while ( dev_data->siot_m_route_table_confirmed[i].TARGET_ID > dev_data->siot_m_route_table_planned[j].TARGET_ID ) // a new one
 			{
 				route_update.to_add = true;
-				route_update.route = dev_data->siot_m_route_table_planned[i];
+				route_update.route = dev_data->siot_m_route_table_planned[j];
 				update->siot_m_route_table_update.push_back( route_update );
 				j++;
 				if ( j >= dev_data->siot_m_route_table_planned.size() )
@@ -1501,7 +1501,7 @@ if ( ctr == 1573 )
 			if ( !same )
 			{
 				link_update.to_add = true;
-				link_update.link = dev_data->siot_m_link_table_planned[i];
+				link_update.link = dev_data->siot_m_link_table_planned[j];
 				update->siot_m_link_table_update.push_back( link_update );
 			}
 			j++;
@@ -1511,7 +1511,7 @@ if ( ctr == 1573 )
 			while ( dev_data->siot_m_link_table_confirmed[i].LINK_ID > dev_data->siot_m_link_table_planned[j].LINK_ID ) // a new one
 			{
 				link_update.to_add = true;
-				link_update.link = dev_data->siot_m_link_table_planned[i];
+				link_update.link = dev_data->siot_m_link_table_planned[j];
 				update->siot_m_link_table_update.push_back( link_update );
 				j++;
 				if ( j >= dev_data->siot_m_link_table_planned.size() )

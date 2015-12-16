@@ -303,7 +303,7 @@ void dbg_siot_mesh_at_root_print_all_device_tables()
 #ifdef SA_DEBUG
 	SIOT_MESH_ROUTING_DATA_ITERATOR it;
 	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )
-		dbg_siot_mesh_at_root_validate_device_tables( &*it );
+		dbg_siot_mesh_at_root_print_device_tables( &*it );
 #endif
 }
 
@@ -1420,13 +1420,15 @@ void siot_mesh_at_root_get_confirmed_table_state_after_applying_update( const SI
 
 void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* dev_data, SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE* update ) 
 {
+#ifdef SA_DEBUG
 static uint16_t ctr = 0;
 ctr++;
 ZEPTO_DEBUG_PRINTF_2( "*** ctr--siot_mesh_at_root_get_diff_as_update = %d ***\n", ctr );
-if ( ctr == 1573 )
-{
 	dbg_siot_mesh_at_root_print_all_device_tables();
-}
+/*if ( ctr == 1573 )
+{
+}*/
+#endif // SA_DEBUG
 	unsigned int i, j;
 	SIOT_MESH_ROUTE_UPDATE route_update;
 	SIOT_MESH_LINK_UPDATE link_update;

@@ -106,19 +106,21 @@ uint8_t preanalyze_debug_packet( uint8_t* buff, uint16_t buff_size, uint16_t* pa
 #ifdef USE_TIME_MASTER_REGISTER
 
 
-void register_incoming_packet_at_comm_stack( MEMORY_HANDLE mem_h, uint8_t ret_code )
+void register_incoming_packet_at_comm_stack( MEMORY_HANDLE mem_h, uint16_t bus_id, uint8_t ret_code )
 {
 	uint16_t packet_sz = memory_object_get_response_size( mem_h );
 	uint8_t* packet_buff = memory_object_get_response_ptr( mem_h );
-	uint8_t interm_packet_buff[ MAX_PACKET_SIZE + 1];
+	uint8_t interm_packet_buff[ MAX_PACKET_SIZE + 3];
 	interm_packet_buff[0] = ret_code;
-	ZEPTO_MEMCPY( interm_packet_buff + 1, packet_buff, packet_sz );
+	interm_packet_buff[1] = (uint8_t)bus_id;
+	interm_packet_buff[2] = (uint8_t)(bus_id >> 8);
+	ZEPTO_MEMCPY( interm_packet_buff + 3, packet_buff, packet_sz );
 
 	uint8_t ret;
 	uint8_t type_out = TIME_RECORD_REGISTER_INCOMING_PACKET_AT_COMM_STACK;
-	uint8_t buff[OUTGOING_DEBUG_PACKET_HEADER_SIZE + MAX_PACKET_SIZE + 1];
+	uint8_t buff[OUTGOING_DEBUG_PACKET_HEADER_SIZE + MAX_PACKET_SIZE + 3];
 
-	uint16_t debug_packet_sz = form_debug_packet( buff, type_out, interm_packet_buff, packet_sz + 1 );
+	uint16_t debug_packet_sz = form_debug_packet( buff, type_out, interm_packet_buff, packet_sz + 3 );
 	ret = send_debug_packet( buff, debug_packet_sz );
 	ZEPTO_DEBUG_ASSERT( ret == COMMLAYER_RET_OK );
 
@@ -129,20 +131,22 @@ void register_incoming_packet_at_comm_stack( MEMORY_HANDLE mem_h, uint8_t ret_co
 	ZEPTO_DEBUG_ASSERT( packet_data_sz == 0 );
 }
 
-void register_outgoing_packet( MEMORY_HANDLE mem_h, uint16_t device_id )
+void register_outgoing_packet( MEMORY_HANDLE mem_h, uint16_t device_id, uint16_t bus_id )
 {
 	uint16_t packet_sz = memory_object_get_request_size( mem_h );
 	uint8_t* packet_buff = memory_object_get_request_ptr( mem_h );
-	uint8_t interm_packet_buff[ MAX_PACKET_SIZE + 2];
+	uint8_t interm_packet_buff[ MAX_PACKET_SIZE + 4];
 	interm_packet_buff[0] = (uint8_t)device_id;
 	interm_packet_buff[1] = (uint8_t)(device_id >> 8);
-	ZEPTO_MEMCPY( interm_packet_buff + 2, packet_buff, packet_sz );
+	interm_packet_buff[2] = (uint8_t)bus_id;
+	interm_packet_buff[3] = (uint8_t)(bus_id >> 8);
+	ZEPTO_MEMCPY( interm_packet_buff + 4, packet_buff, packet_sz );
 
 	uint8_t ret;
 	uint8_t type_out = TIME_RECORD_REGISTER_OUTGOING_PACKET;
-	uint8_t buff[OUTGOING_DEBUG_PACKET_HEADER_SIZE + MAX_PACKET_SIZE];
+	uint8_t buff[OUTGOING_DEBUG_PACKET_HEADER_SIZE + MAX_PACKET_SIZE + 4];
 
-	uint16_t debug_packet_sz = form_debug_packet( buff, type_out, interm_packet_buff, packet_sz + 2 );
+	uint16_t debug_packet_sz = form_debug_packet( buff, type_out, interm_packet_buff, packet_sz + 4 );
 	ret = send_debug_packet( buff, debug_packet_sz );
 	ZEPTO_DEBUG_ASSERT( ret == COMMLAYER_RET_OK );
 
@@ -225,7 +229,7 @@ void register_eeprom_state()
 
 #else // USE_TIME_MASTER_REGISTER
 
-uint8_t request_incoming_packet_at_comm_stack( MEMORY_HANDLE mem_h )
+uint8_t request_incoming_packet_at_comm_stack( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 {
 	uint8_t ret;
 	uint8_t type_out = TIME_RECORD_REGISTER_INCOMING_PACKET_AT_COMM_STACK;
@@ -244,24 +248,27 @@ uint8_t request_incoming_packet_at_comm_stack( MEMORY_HANDLE mem_h )
 	uint8_t* data_in = buff + data_offset;
 
 	zepto_parser_free_memory( mem_h );
-	zepto_write_block( mem_h, data_in + 1, packet_data_sz - 1 );
+	zepto_write_block( mem_h, data_in + 3, packet_data_sz - 3 );
+	*bus_id = data_in[2]; *bus_id <<= 8; *bus_id += data_in[1];
 	return data_in[0];
 }
 
-void request_outgoing_packet( MEMORY_HANDLE mem_h, uint16_t device_id )
+void request_outgoing_packet( MEMORY_HANDLE mem_h, uint16_t device_id, uint16_t bus_id )
 {
 	uint16_t packet_sz = memory_object_get_request_size( mem_h );
 	uint8_t* packet_buff = memory_object_get_request_ptr( mem_h );
-	uint8_t interm_packet_buff[ MAX_PACKET_SIZE + 2];
+	uint8_t interm_packet_buff[ MAX_PACKET_SIZE + 4];
 	interm_packet_buff[0] = (uint8_t)device_id;
 	interm_packet_buff[1] = (uint8_t)(device_id >> 8);
-	ZEPTO_MEMCPY( interm_packet_buff + 2, packet_buff, packet_sz );
+	interm_packet_buff[2] = (uint8_t)bus_id;
+	interm_packet_buff[3] = (uint8_t)(bus_id >> 8);
+	ZEPTO_MEMCPY( interm_packet_buff + 4, packet_buff, packet_sz );
 
 	uint8_t ret;
 	uint8_t type_out = TIME_RECORD_REGISTER_OUTGOING_PACKET;
-	uint8_t buff[INCOMING_DEBUG_PACKET_HEADER_SIZE + MAX_PACKET_SIZE + 2 ];
+	uint8_t buff[INCOMING_DEBUG_PACKET_HEADER_SIZE + MAX_PACKET_SIZE + 4 ];
 
-	uint16_t debug_packet_sz = form_debug_packet( buff, type_out, interm_packet_buff, packet_sz + 2 );
+	uint16_t debug_packet_sz = form_debug_packet( buff, type_out, interm_packet_buff, packet_sz + 4 );
 	ret = send_debug_packet( buff, debug_packet_sz );
 	ZEPTO_DEBUG_ASSERT( ret == COMMLAYER_RET_OK );
 
@@ -371,35 +378,35 @@ void check_get_time_call_point( uint8_t call_point, const char* file, uint16_t l
 }
 
 
-uint8_t debug_try_get_message_within_master( MEMORY_HANDLE mem_h )
+uint8_t debug_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 {
 #ifdef USE_TIME_MASTER_REGISTER
-	uint8_t ret_code = try_get_message_within_master( mem_h );
-	register_incoming_packet_at_comm_stack( mem_h, ret_code );
+	uint8_t ret_code = try_get_message_within_master( mem_h, bus_id );
+	register_incoming_packet_at_comm_stack( mem_h, *bus_id, ret_code );
 	return ret_code;
 #else
-	return request_incoming_packet_at_comm_stack( mem_h );
+	return request_incoming_packet_at_comm_stack( mem_h, bus_id );
 #endif // USE_TIME_MASTER_REGISTER
 }
 
-uint8_t debug_send_message( MEMORY_HANDLE mem_h )
+uint8_t debug_send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 {
 #if !defined USE_TIME_MASTER_REGISTER
-	request_outgoing_packet( mem_h, DEVICE_SELF_ID );
+	request_outgoing_packet( mem_h, DEVICE_SELF_ID, bus_id );
 	return COMMLAYER_RET_OK;
 #else
-	register_outgoing_packet( mem_h, DEVICE_SELF_ID );
-	return send_message( mem_h );
+	register_outgoing_packet( mem_h, DEVICE_SELF_ID, bus_id );
+	return send_message( mem_h, bus_id );
 #endif // USE_TIME_MASTER_REGISTER
 }
 
 uint8_t debug_send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t device_id )
 {
 #if !defined USE_TIME_MASTER_REGISTER
-	request_outgoing_packet( mem_h, device_id );
+	request_outgoing_packet( mem_h, device_id, 0xFFFF );
 	return COMMLAYER_RET_OK;
 #else
-	register_outgoing_packet( mem_h, device_id );
+	register_outgoing_packet( mem_h, device_id, 0xFFFF );
 	return send_to_central_unit( mem_h, device_id );
 #endif // USE_TIME_MASTER_REGISTER
 }

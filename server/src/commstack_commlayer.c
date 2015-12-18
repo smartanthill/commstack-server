@@ -219,10 +219,10 @@ uint8_t try_get_packet_within_master_loop( uint8_t* buff, uint16_t sz )
 
 }
 
-uint8_t try_get_packet_size_within_master_loop( uint8_t* buff )
+uint8_t try_get_packet_header_within_master_loop( uint8_t* buff, uint16_t sz )
 {
 	socklen_t fromlen = sizeof(sa_other_with_cl);
-	int recsize = recvfrom(sock_with_cl, (char *)(buff + buffer_in_with_cl_pos), 3 - buffer_in_with_cl_pos, 0, (struct sockaddr *)&sa_other_with_cl, &fromlen);
+	int recsize = recvfrom(sock_with_cl, (char *)(buff + buffer_in_with_cl_pos), sz - buffer_in_with_cl_pos, 0, (struct sockaddr *)&sa_other_with_cl, &fromlen);
 	if (recsize < 0)
 	{
 #if defined _MSC_VER || defined __MINGW32__
@@ -244,7 +244,7 @@ uint8_t try_get_packet_size_within_master_loop( uint8_t* buff )
 	else
 	{
 		buffer_in_with_cl_pos += recsize;
-		if ( buffer_in_with_cl_pos < 3 )
+		if ( buffer_in_with_cl_pos < sz )
 		{
 			return COMMLAYER_RET_PENDING;
 		}
@@ -253,7 +253,7 @@ uint8_t try_get_packet_size_within_master_loop( uint8_t* buff )
 
 }
 
-uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h )
+uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 {
 	// do cleanup
 	memory_object_response_to_request( mem_h );
@@ -265,13 +265,14 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h )
 
 	do //TODO: add delays or some waiting
 	{
-		ret = try_get_packet_size_within_master_loop( buff );
+		ret = try_get_packet_header_within_master_loop( buff, 5 );
 	}
 	while ( ret == COMMLAYER_RET_PENDING );
 	if ( ret != COMMLAYER_RET_OK )
 		return ret;
 	uint16_t sz = buff[1]; sz <<= 8; sz += buff[0];
-	uint8_t packet_src = buff[2];
+	*bus_id = buff[3]; *bus_id <<= 8; *bus_id += buff[2];
+	uint8_t packet_src = buff[4];
 
 	buffer_in_with_cl_pos = 0;
 	do //TODO: add delays or some waiting
@@ -302,7 +303,7 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h )
 	return ret;
 }
 
-uint8_t send_within_master( MEMORY_HANDLE mem_h, uint8_t destination )
+uint8_t send_within_master( MEMORY_HANDLE mem_h, uint16_t bus_id, uint8_t destination )
 {
 	ZEPTO_DEBUG_PRINTF_1( "send_within_master() called...\n" );
 
@@ -310,12 +311,14 @@ uint8_t send_within_master( MEMORY_HANDLE mem_h, uint8_t destination )
 	memory_object_request_to_response( mem_h );
 	ZEPTO_DEBUG_ASSERT( sz == memory_object_get_response_size( mem_h ) );
 	ZEPTO_DEBUG_ASSERT( sz != 0 ); // note: any valid message would have to have at least some bytes for headers, etc, so it cannot be empty
-	uint8_t* buff = memory_object_prepend( mem_h, 3 );
+	uint8_t* buff = memory_object_prepend( mem_h, 5 );
 	ZEPTO_DEBUG_ASSERT( buff != NULL );
 	buff[0] = (uint8_t)sz;
 	buff[1] = sz >> 8;
-	buff[2] = destination;
-	int bytes_sent = sendto(sock_with_cl, (char*)buff, sz+3, 0, (struct sockaddr*)&sa_other_with_cl, sizeof sa_other_with_cl);
+	buff[2] = (uint8_t)bus_id;
+	buff[3] = bus_id >> 8;
+	buff[4] = destination;
+	int bytes_sent = sendto(sock_with_cl, (char*)buff, sz+5, 0, (struct sockaddr*)&sa_other_with_cl, sizeof sa_other_with_cl);
 	// do full cleanup
 	memory_object_response_to_request( mem_h );
 	memory_object_response_to_request( mem_h );
@@ -332,9 +335,9 @@ uint8_t send_within_master( MEMORY_HANDLE mem_h, uint8_t destination )
 		return COMMLAYER_RET_FAILED;
 	}
 #if defined _MSC_VER || defined __MINGW32__
-	ZEPTO_DEBUG_PRINTF_4( "[%d] message sent within master; mem_h = %d, size = %d\n", GetTickCount(), mem_h, sz );
+	ZEPTO_DEBUG_PRINTF_6( "[%d] message sent within master; mem_h = %d, size = %d, bus_id = %x, destination = %d\n", GetTickCount(), mem_h, sz, bus_id, destination );
 #else
-	ZEPTO_DEBUG_PRINTF_3( "[--] message sent within master; mem_h = %d, size = %d\n", mem_h, sz );
+	ZEPTO_DEBUG_PRINTF_5( "[--] message sent within master; mem_h = %d, size = %d, bus_id = %x, destination = %d\n", mem_h, sz, bus_id, destination );
 #endif
 	return COMMLAYER_RET_OK;
 }
@@ -390,7 +393,7 @@ uint8_t wait_for_communication_event( waiting_for* wf )
 	}
 }
 
-uint8_t send_message( MEMORY_HANDLE mem_h )
+uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 {
 #ifdef SA_DEBUG
 	uint16_t i;
@@ -401,7 +404,12 @@ uint8_t send_message( MEMORY_HANDLE mem_h )
 		ZEPTO_DEBUG_PRINTF_2( "%02x ", rq[i] );
 	ZEPTO_DEBUG_PRINTF_1( "\n" );
 #endif
-	return send_within_master( mem_h, 35 );
+if ( bus_id == 0xFFFF )
+{
+	bus_id = 0xFFFF;
+}
+	ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
+	return send_within_master( mem_h, bus_id, 35 );
 }
 
 uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
@@ -414,7 +422,7 @@ uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
 	zepto_parser_encode_and_prepend_uint16( mem_h, src_id );
 	zepto_response_to_request( mem_h );
-	return send_within_master( mem_h, 37 );
+	return send_within_master( mem_h, 0xFFFF, 37 );
 }
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
@@ -427,7 +435,7 @@ uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
 	zepto_parser_encode_and_prepend_uint16( mem_h, src_id );
 	zepto_response_to_request( mem_h );
-	return send_within_master( mem_h, 47 );
+	return send_within_master( mem_h, 0xFFFF, 47 );
 }
 
 // from comm.stack: 35: intended for slave; 37: intended for central unit

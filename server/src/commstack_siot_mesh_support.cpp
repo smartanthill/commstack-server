@@ -1546,16 +1546,13 @@ ZEPTO_DEBUG_PRINTF_2( "*** ctr--siot_mesh_at_root_get_diff_as_update = %d ***\n"
 	test_dev_data.bus_type_list = dev_data->bus_type_list;
 	test_dev_data.is_retransmitter = dev_data->is_retransmitter;
 
-if ( ctr == 1573 )
+/*if ( ctr == 1573 )
 {
 	dbg_siot_mesh_at_root_print_device_tables( &test_dev_data );
-}
+}*/
 	siot_mesh_at_root_apply_update_to_device_routing_data( update, &test_dev_data );
-if ( ctr == 1573 )
-{
 	siot_mesh_at_root_print_update( update );
 	dbg_siot_mesh_at_root_print_device_tables( &test_dev_data );
-}
 
 	ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_route_table_confirmed.size() == test_dev_data.siot_m_route_table_planned.size() );
 	for ( i=0; i<test_dev_data.siot_m_route_table_confirmed.size(); i++ )
@@ -1565,7 +1562,7 @@ if ( !( test_dev_data.siot_m_route_table_confirmed[i].TARGET_ID == dev_data->sio
 	test_dev_data.siot_m_route_table_confirmed[i].TARGET_ID = test_dev_data.siot_m_route_table_confirmed[i].TARGET_ID;
 }
 		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_route_table_confirmed[i].TARGET_ID == dev_data->siot_m_route_table_planned[i].TARGET_ID );
-		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_route_table_confirmed[i].LINK_ID == dev_data->siot_m_route_table_planned[i].LINK_ID ); // ******************
+		ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_route_table_confirmed[i].LINK_ID == dev_data->siot_m_route_table_planned[i].LINK_ID );
 	}
 
 	ZEPTO_DEBUG_ASSERT( test_dev_data.siot_m_link_table_confirmed.size() == dev_data->siot_m_link_table_planned.size() );
@@ -2212,11 +2209,6 @@ uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_
 
 void siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t target_id, uint16_t next_hop_id )
 {
-/*	uint16_t link_id;
-	SIOT_MESH_LINK link;
-	siot_mesh_at_root_target_to_link_id( target_id, &link_id );
-	siot_mesh_get_link( link_id, &link );*/
-
 	siot_mesh_at_root_remove_link_to_target_route_error_reported( 0, next_hop_id, target_id, true );
 }
 

@@ -127,7 +127,7 @@ int main_loop()
 	}
 	siot_mesh_init_tables();
 		
-	uint16_t bus_id;
+	uint16_t bus_id = 0xFFFF;
 	uint16_t target_device_id;
 	bool for_ctr = 0;
 
@@ -182,6 +182,7 @@ wait_for_comm_event:
 		{
 			case SIOT_MESH_RET_PASS_TO_SEND:
 			{
+				ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
 				zepto_response_to_request( working_handle.packet_h );
 				goto hal_send;
 				break;
@@ -263,29 +264,25 @@ wait_for_comm_event:
 			case COMMLAYER_RET_FROM_CENTRAL_UNIT:
 			{
 				// regular processing will be done below in the next block
-				ret_code = HAL_GET_PACKET_BYTES(  working_handle.packet_h );
+				uint16_t param;
+				ret_code = HAL_GET_PACKET_BYTES( working_handle.packet_h, &param );
 				if ( ret_code == COMMLAYER_RET_FAILED )
 					return 0;
 				if ( ret_code == COMMLAYER_RET_OK_AS_CU )
 				{
 					zepto_response_to_request(  working_handle.packet_h );
 					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_CU\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
-					parser_obj po, po1;
-					zepto_parser_init( &po,  working_handle.packet_h );
-					dev_in_use = zepto_parse_encoded_uint16( &po );
+					dev_in_use = param;
 					dev_in_use --;
 					ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
-					zepto_parser_init_by_parser( &po1, &po );
-					zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
-					zepto_convert_part_of_request_to_response(  working_handle.packet_h, &po, &po1 );
-
-					zepto_response_to_request(  working_handle.packet_h );
 					goto client_received;
 					break;
 				}
 				else if ( ret_code == COMMLAYER_RET_OK_AS_SLAVE )
 				{
+					bus_id = param;
 					// regular processing will be done below in the next block
+					ZEPTO_DEBUG_ASSERT( bus_id != SIOT_MESH_BUS_UNDEFINED );
 					zepto_response_to_request(  working_handle.packet_h );
 					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_SLAVE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
 					goto siotmp_rec;
@@ -346,7 +343,8 @@ wait_for_comm_event:
 		// 2.0. Pass to siot/mesh
 	siotmp_rec:
 #if 1//SIOT_MESH_IMPLEMENTATION_WORKS
-		ret_code = handler_siot_mesh_receive_packet( &currt, &wait_for, working_handle.packet_h, MEMORY_HANDLE_MESH_ACK, &dev_in_use, 0, 0 ); // TODO: add actual connection quality
+		ZEPTO_DEBUG_ASSERT( bus_id != SIOT_MESH_BUS_UNDEFINED );
+		ret_code = handler_siot_mesh_receive_packet( &currt, &wait_for, working_handle.packet_h, MEMORY_HANDLE_MESH_ACK, &dev_in_use, &bus_id, 0, 0 ); // TODO: add actual connection quality
 		dev_in_use--;
 		ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
 		zepto_response_to_request(  working_handle.packet_h );
@@ -356,8 +354,9 @@ wait_for_comm_event:
 		{
 			case SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS:
 			{
+				ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
 				zepto_response_to_request( MEMORY_HANDLE_MESH_ACK );
-				HAL_SEND_PACKET_TO_DEVICE( MEMORY_HANDLE_MESH_ACK );
+				HAL_SEND_PACKET_TO_DEVICE( MEMORY_HANDLE_MESH_ACK, bus_id );
 				zepto_parser_free_memory( MEMORY_HANDLE_MESH_ACK );
 				// regular processing will be done below in the next block
 				break;
@@ -369,6 +368,7 @@ wait_for_comm_event:
 			}
 			case SIOT_MESH_RET_PASS_TO_SEND:
 			{
+				ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
 				goto hal_send;
 				break;
 			}
@@ -778,6 +778,7 @@ saoudp_send:
 			case SIOT_MESH_RET_PASS_TO_SEND:
 			{
 				// regular processing will be done below in the next block
+				ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
 				break;
 			}
 			case SIOT_MESH_RET_OK:
@@ -798,7 +799,8 @@ saoudp_send:
 		// send packet
 hal_send:
 //		ZEPTO_DEBUG_ASSERT( bus_id == 0 ); // TODO: bus_id must be a part of send_packet() call; we are now just in the middle of development...
-		ret_code = HAL_SEND_PACKET_TO_DEVICE(  working_handle.packet_h );
+		ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
+		ret_code = HAL_SEND_PACKET_TO_DEVICE(  working_handle.packet_h, bus_id );
 		zepto_parser_free_memory(  working_handle.packet_h );
 		if (ret_code != COMMLAYER_RET_OK )
 		{

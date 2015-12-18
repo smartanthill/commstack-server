@@ -32,8 +32,8 @@ Copyright (C) 2015 OLogN Technologies AG
 #ifdef USE_TIME_MASTER
 
 bool debug_communication_initialize();
-uint8_t debug_try_get_message_within_master( MEMORY_HANDLE mem_h );
-uint8_t debug_send_message( MEMORY_HANDLE mem_h );
+uint8_t debug_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id );
+uint8_t debug_send_message( MEMORY_HANDLE mem_h, uint16_t bus_id );
 uint8_t debug_send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t device_id );
 void  debug_hal_get_time( sa_time_val* tv, uint8_t call_point, const char* file, uint16_t line );
 uint8_t debug_wait_for_communication_event( waiting_for* wf );
@@ -46,8 +46,8 @@ void request_eeprom_state();
 #define DEBUG_ON_EEPROM_INIT() request_eeprom_state()
 #endif
 #define HAL_COMMUNICATION_INITIALIZE debug_communication_initialize
-#define HAL_GET_PACKET_BYTES( packet_handle ) debug_try_get_message_within_master( packet_handle )
-#define HAL_SEND_PACKET_TO_DEVICE( packet_handle ) debug_send_message( packet_handle )
+#define HAL_GET_PACKET_BYTES( packet_handle, bus_id_ptr ) debug_try_get_message_within_master( packet_handle, bus_id_ptr )
+#define HAL_SEND_PACKET_TO_DEVICE( packet_handle, bus_id ) debug_send_message( packet_handle, bus_id )
 #define HAL_SEND_PACKET_TO_CU( packet_handle, device_id ) debug_send_to_central_unit( packet_handle, device_id )
 #define HAL_GET_TIME( time_val_ptr, REQUEST_POINT )  debug_hal_get_time( time_val_ptr, REQUEST_POINT, __FILE__, (uint16_t)__LINE__ )
 #define HAL_WAIT_FOR_COMM_EVENT( wait_for_ptr ) debug_wait_for_communication_event( wait_for_ptr )
@@ -56,8 +56,8 @@ void request_eeprom_state();
 
 #define DEBUG_ON_EEPROM_INIT()
 #define HAL_COMMUNICATION_INITIALIZE communication_initialize
-#define HAL_GET_PACKET_BYTES( packet_handle ) try_get_message_within_master( packet_handle )
-#define HAL_SEND_PACKET_TO_DEVICE( packet_handle ) send_message( packet_handle )
+#define HAL_GET_PACKET_BYTES( packet_handle, bus_id_ptr ) try_get_message_within_master( packet_handle, bus_id_ptr )
+#define HAL_SEND_PACKET_TO_DEVICE( packet_handle, bus_id ) send_message( packet_handle, bus_id )
 #define HAL_SEND_PACKET_TO_CU( packet_handle, device_id ) send_to_central_unit( packet_handle, device_id )
 #define HAL_GET_TIME( time_val_ptr, REQUEST_POINT )  sa_get_time( time_val_ptr )
 #define HAL_WAIT_FOR_COMM_EVENT( wait_for_ptr ) wait_for_communication_event( wait_for_ptr )

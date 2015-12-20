@@ -339,7 +339,7 @@ void siot_mesh_init_tables()  // TODO: this call reflects current development st
 	data.last_from_santa_request_id = 0;
 	data.device_id = 2;
 	data.bus_type_list.clear();
-	data.bus_type_list.push_back( 0 );
+	data.bus_type_list.push_back( 1 );
 	mesh_routing_data.push_back( data );
 //	mesh_routing_data_being_constructed.push_back( data );
 	data.device_id = 3;
@@ -1847,6 +1847,7 @@ void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUT
 		}
 		else
 		{
+			ZEPTO_DEBUG_ASSERT( !update->clear_tables_first );
 			// | DELETE-ROUTE-ENTRY-AND-TARGET-ID |
 			header = more | ( DELETE_ROUTE_ENTRY << 1 ) | ( update->siot_m_route_table_update[i].route.TARGET_ID << 3 );
 			zepto_parser_encode_and_append_uint16( mem_h, header );
@@ -1869,6 +1870,7 @@ void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUT
 		}
 		else
 		{
+			ZEPTO_DEBUG_ASSERT( !update->clear_tables_first );
 			// | DELETE-LINK-ENTRY-AND-LINK-ID |
 			header = more | ( DELETE_LINK_ENTRY << 1 ) | ( update->siot_m_link_table_update[i].link.LINK_ID << 3 );
 			zepto_parser_encode_and_append_uint16( mem_h, header );

@@ -452,13 +452,7 @@ void zepto_mem_man_move_obj_max_right( REQUEST_REPLY_HANDLE mem_h )
 		return;
 	}
 #endif
-#ifdef _DEBUG
-	if ( obj->ptr == 0 )
-	{
-		ZEPTO_DEBUG_PRINTF_2( "handle = %d: ptr == NULL\n", mem_h );
-	}
 	ZEPTO_DEBUG_ASSERT( obj->ptr != 0 );
-#endif
 
 	uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
 	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );

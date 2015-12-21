@@ -97,18 +97,10 @@ int main_loop()
 	ZEPTO_DEBUG_PRINTF_1("starting CLIENT's COMMM STACK...\n");
 	ZEPTO_DEBUG_PRINTF_1("================================\n\n");
 
-	// TODO: actual key loading, etc
-//	uint8_t AES_ENCRYPTION_KEY[16];
-//	ZEPTO_MEMCPY( AES_ENCRYPTION_KEY, "16-byte fake key", 16 );
-//	memset( AES_ENCRYPTION_KEY, 0xab, 16 );
-
-//	timeout_action tact;
-//	tact.action = 0;
 	sa_time_val currt;
 	waiting_for wait_for;
 	ZEPTO_MEMSET( &wait_for, 0, sizeof( waiting_for ) );
 	wait_for.wait_packet = 1;
-//	TIME_MILLISECONDS16_TO_TIMEVAL( 1000, wait_for.wait_time ) //+++TODO: actual processing throughout the code
 	SA_TIME_SET_INFINITE_TIME( wait_for.wait_time );
 
 	uint8_t timer_val = 0x1;
@@ -142,7 +134,6 @@ wait_for_comm_event:
 		HAL_GET_TIME( &(currt), TIME_REQUEST_POINT__LOOP_TOP );
 
 		for ( dev_in_use=0; dev_in_use<MAX_INSTANCES_SUPPORTED; dev_in_use++ )
-//		dev_in_use = 0;
 		{
 			// 1.1. test GDP-ctr
 			ret_code = handler_sagdp_timer( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR, devices[dev_in_use].MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(devices[dev_in_use].sagdp_context_ctr), &(working_handle.resend_cnt) );
@@ -175,7 +166,6 @@ wait_for_comm_event:
 			}
 		}
 
-#if 1//SIOT_MESH_IMPLEMENTATION_WORKS
 		// 2. MESH
 		ret_code = handler_siot_mesh_timer( &currt, &wait_for,  working_handle.packet_h, &target_device_id, &bus_id );
 		switch ( ret_code )
@@ -243,7 +233,6 @@ wait_for_comm_event:
 				ZEPTO_DEBUG_ASSERT( 0 == "Unexpected ret code" );
 			}
 		}
-#endif // SIOT_MESH_IMPLEMENTATION_WORKS
 
 		// 3. (next candidate)
 
@@ -295,34 +284,6 @@ wait_for_comm_event:
 			}
 			case COMMLAYER_RET_TIMEOUT:
 			{
-#if 0
-				// ZEPTO_DEBUG_PRINTF_1( "no reply received; the last message (if any) will be resent by timer\n" );
-				sa_get_time( &currt );
-				gdp_context = SAGDP_CONTEXT_UNKNOWN;
-				ret_code = handler_sagdp_timer( &gdp_context, &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h/*, &sagdp_data*/ );
-				if ( ret_code == SAGDP_RET_OK )
-				{
-					zepto_response_to_request(  working_handle.packet_h );
-					goto wait_for_comm_event;
-				}
-				else if ( ret_code == SAGDP_RET_NEED_NONCE )
-				{
-					ret_code = handler_sasp_get_packet_id( nonce, &(devices[dev_in_use].sasp_data), devices[dev_in_use].device_id );
-					ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
-					sa_get_time( &currt );
-					ret_code = handler_sagdp_timer( &gdp_context, &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h/*, &sagdp_data*/ );
-					ZEPTO_DEBUG_ASSERT( ret_code == SAGDP_RET_TO_LOWER_REPEATED );
-					zepto_response_to_request(  working_handle.packet_h );
-					goto saspsend;
-					break;
-				}
-				else
-				{
-					ZEPTO_DEBUG_PRINTF_2( "ret_code = %d\n", ret_code );
-					ZEPTO_DEBUG_ASSERT( 0 );
-				}
-#endif // 0
-					
 				goto wait_for_comm_event;
 				break;
 			}
@@ -341,8 +302,7 @@ wait_for_comm_event:
 
 
 		// 2.0. Pass to siot/mesh
-	siotmp_rec:
-#if 1//SIOT_MESH_IMPLEMENTATION_WORKS
+siotmp_rec:
 		ZEPTO_DEBUG_ASSERT( bus_id != SIOT_MESH_BUS_UNDEFINED );
 		ret_code = handler_siot_mesh_receive_packet( &currt, &wait_for, working_handle.packet_h, MEMORY_HANDLE_MESH_ACK, &dev_in_use, &bus_id, 0, 0 ); // TODO: add actual connection quality
 		dev_in_use--;
@@ -387,7 +347,6 @@ wait_for_comm_event:
 				break;
 			}
 		}
-#endif
 
 		// 2.1. Pass to SAoUDP
 //saoudp_in:
@@ -769,7 +728,6 @@ saoudp_send:
 			}
 		}
 
-#if 1//SIOT_MESH_IMPLEMENTATION_WORKS
 		ret_code = handler_siot_mesh_send_packet( for_ctr, &currt, &wait_for, devices[dev_in_use].device_id,  working_handle.packet_h, working_handle.resend_cnt, &bus_id ); // currently we know only about a single client with id=1
 		zepto_response_to_request(  working_handle.packet_h );
 
@@ -794,7 +752,6 @@ saoudp_send:
 				break;
 			}
 		}
-#endif
 
 		// send packet
 hal_send:

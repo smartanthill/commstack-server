@@ -1,10 +1,10 @@
 SmartAnthill Communication Stack server
 =======================================
 
-.. image:: https://travis-ci.org/smartanthill/smartanthill-commstack-server.svg?branch=develop
-    :target: https://travis-ci.org/smartanthill/smartanthill-commstack-server
-.. image:: https://ci.appveyor.com/api/projects/status/ntqx6hy0a8aoqatj?svg=true
-    :target: https://ci.appveyor.com/project/ivankravets/smartanthill-commstack-server
+.. image:: https://travis-ci.org/smartanthill/commstack-server.svg?branch=develop
+    :target: https://travis-ci.org/smartanthill/commstack-server
+.. image:: https://ci.appveyor.com/api/projects/status/mavv82wt7p7e3f60?svg=true
+    :target: https://ci.appveyor.com/project/ivankravets/commstack-server/history
 
 `SmartAnthill <https://github.com/smartanthill/smartanthill2_0>`_
 (Network Service) uses this server to communicate with the end embedded device

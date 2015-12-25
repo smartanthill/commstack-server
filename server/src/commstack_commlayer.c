@@ -404,10 +404,6 @@ uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 		ZEPTO_DEBUG_PRINTF_2( "%02x ", rq[i] );
 	ZEPTO_DEBUG_PRINTF_1( "\n" );
 #endif
-if ( bus_id == 0xFFFF )
-{
-	bus_id = 0xFFFF;
-}
 	ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
 	return send_within_master( mem_h, bus_id, 35 );
 }

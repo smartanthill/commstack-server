@@ -410,28 +410,12 @@ uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 
 uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
-	parser_obj po, po1;
-	zepto_parser_init( &po, mem_h );
-	zepto_parser_init( &po1, mem_h );
-	uint16_t sz = zepto_parsing_remaining_bytes( &po );
-	zepto_parse_skip_block( &po1, sz );
-	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
-	zepto_parser_encode_and_prepend_uint16( mem_h, src_id );
-	zepto_response_to_request( mem_h );
-	return send_within_master( mem_h, 0xFFFF, 37 );
+	return send_within_master( mem_h, src_id, 37 );
 }
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
-	parser_obj po, po1;
-	zepto_parser_init( &po, mem_h );
-	zepto_parser_init( &po1, mem_h );
-	uint16_t sz = zepto_parsing_remaining_bytes( &po );
-	zepto_parse_skip_block( &po1, sz );
-	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
-	zepto_parser_encode_and_prepend_uint16( mem_h, src_id );
-	zepto_response_to_request( mem_h );
-	return send_within_master( mem_h, 0xFFFF, 47 );
+	return send_within_master( mem_h, src_id, 47 );
 }
 
 // from comm.stack: 35: intended for slave; 37: intended for central unit

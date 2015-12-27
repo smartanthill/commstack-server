@@ -1161,7 +1161,7 @@ void siot_mesh_at_root_print_update( const SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE*
 
 	for ( i=0; i<update->siot_m_link_table_update.size(); i++ )
 	{
-		if ( update->siot_m_route_table_update[i].to_add )
+		if ( update->siot_m_link_table_update[i].to_add )
 			ZEPTO_DEBUG_PRINTF_4( " L+{%d, %d, %d},", update->siot_m_link_table_update[i].link.LINK_ID, update->siot_m_link_table_update[i].link.NEXT_HOP, update->siot_m_link_table_update[i].link.BUS_ID );
 		else
 			ZEPTO_DEBUG_PRINTF_2( " L-{%d},", update->siot_m_link_table_update[i].link.LINK_ID );

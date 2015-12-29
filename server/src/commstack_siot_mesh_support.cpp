@@ -18,8 +18,6 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <simpleiot/siot_m_protocol.h>
 #include <simpleiot_hal/siot_mem_mngmt.h>
 
-#define NEW_UPDATE_PROCESSING
-
 // items below were defined for various reasons in this projec;
 // STL does not like such redefinitions (see <xkeycheck.h> for details); we do favor for STL
 // If one knows how this could be addressed properly, just do it!
@@ -55,6 +53,12 @@ typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA // used to keep copies of r
 	uint16_t device_id;
 	bool is_retransmitter;
 	uint16_t last_from_santa_request_id;
+#ifdef SIOT_MESH_BTLE_MODE
+	uint16_t last_reconnect_req_id;
+	bool last_reconnect_req_id_is_valid;
+#endif
+	sa_time_val time_to_sent_next_from_santa;
+	bool from_santa_sequence_started;
 	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table_confirmed;
 	SIOT_M_LINK_TABLE_TYPE siot_m_link_table_confirmed;
 	SIOT_M_ROUTE_TABLE_TYPE siot_m_route_table_planned;
@@ -67,10 +71,13 @@ typedef vector< SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA >::iterator SIOT_MESH_ROUTI
 
 SIOT_MESH_ROUTING_DATA mesh_routing_data; // confirmed copies of respective tables at devices
 
-uint16_t siot_mesh_calculate_route_table_checksum( SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA* data )
+typedef struct _ROUTING_TO_RETRANSMITTER
 {
-	return 0;
-}
+	sa_time_val next_check_time;
+} ROUTING_TO_RETRANSMITTER;
+
+ROUTING_TO_RETRANSMITTER routing_to_retransmitter;
+
 
 ///////////////////   Common staff: checksums   //////////////////////
 
@@ -306,12 +313,18 @@ void dbg_siot_mesh_at_root_print_all_device_tables()
 
 ///////////////////   Basic calls: initializing  //////////////////////
 
-void siot_mesh_init_tables()  // TODO: this call reflects current development stage and may or may not survive in the future
+void siot_mesh_init_tables( sa_time_val* currt )  // TODO: this call reflects current development stage and may or may not survive in the future
 {
 	// manual device adding
 	// as soon as pairing is implemented below code will be removed or heavily revised
 
 	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA data;
+#ifdef SIOT_MESH_BTLE_MODE
+	data.last_reconnect_req_id = 0;
+	data.last_reconnect_req_id_is_valid = false;
+#endif
+
+	data.from_santa_sequence_started = false;
 
 	// 0. Root device
 	data.device_id = 0;
@@ -342,6 +355,12 @@ void siot_mesh_init_tables()  // TODO: this call reflects current development st
 	mesh_routing_data.push_back( data );
 	data.device_id = 5;
 	mesh_routing_data.push_back( data );
+
+	// regular checks routing_to_retransmitter
+	sa_time_val diff_tval;
+	TIME_MILLISECONDS16_TO_TIMEVAL( MESH_CHECK_ROUTS_TO_RETRANSMITTERS, diff_tval );
+	sa_hal_time_val_copy_from( &(routing_to_retransmitter.next_check_time), currt );
+	SA_TIME_INCREMENT_BY_TICKS( routing_to_retransmitter.next_check_time, diff_tval );
 }
 
 ///////////////////   Basic calls: device list  //////////////////////
@@ -634,7 +653,6 @@ void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t
 		last_hops_of_all_devices.push_back( dev_hops );
 	}
 }
-
 
 #define SIOT_MESH_IS_QUALITY_OF_INCOMING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
 #define SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
@@ -958,7 +976,7 @@ void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, cons
 //////////////////////////////////////////////////////////////////////////////////////////////////
 // complex packet generation
 
-void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t target_id )
+void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t target_id )
 {
 	// TODO++++: revision required
 	// ASSUMPTIONS OF THE CURRENT IMPLEMENTATION
@@ -1070,11 +1088,14 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 		zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
 
 		// PAYLOAD
-		parser_obj po, po1;
-		zepto_parser_init( &po, mem_h );
-		zepto_parser_init( &po1, mem_h );
-		zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
-		zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po, &po1, output_h );
+		if ( mem_h != MEMORY_HANDLE_INVALID )
+		{
+			parser_obj po, po1;
+			zepto_parser_init( &po, mem_h );
+			zepto_parser_init( &po1, mem_h );
+			zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+			zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po, &po1, output_h );
+		}
 
 		// FULL-CHECKSUM
 		checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
@@ -1083,7 +1104,7 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 
 		zepto_response_to_request( output_h );
 		siot_mesh_at_root_add_send_from_santa_task( output_h, currt, 0 );
-		TIME_MILLISECONDS16_TO_TIMEVAL( 0, wf->wait_time );
+		TIME_MILLISECONDS16_TO_TIMEVAL( 0, *time_to_next_event );
 	}
 
 	release_memory_handle( output_h );
@@ -1093,8 +1114,6 @@ void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* 
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#ifdef NEW_UPDATE_PROCESSING
 
 typedef struct _SIOT_MESH_ROUTE_UPDATE
 {
@@ -1369,11 +1388,12 @@ void siot_mesh_at_root_get_diff_as_update( const SIOT_MESH_DEVICE_ROUTE_AND_LINK
 #ifdef SA_DEBUG
 static uint16_t ctr = 0;
 ctr++;
-ZEPTO_DEBUG_PRINTF_2( "*** ctr--siot_mesh_at_root_get_diff_as_update = %d ***\n", ctr );
+ZEPTO_DEBUG_PRINTF_3( "*** ctr--siot_mesh_at_root_get_diff_as_update = %d, device_id = %d ***\n", ctr, dev_data->device_id );
 dbg_siot_mesh_at_root_print_all_device_tables();
-/*if ( ctr == 1573 )
+if ( ctr == 2276 )
 {
-}*/
+ZEPTO_DEBUG_PRINTF_3( "*** ctr--siot_mesh_at_root_get_diff_as_update = %d, device_id = %d *** -- FAILED STEP STARTS HERE\n", ctr, dev_data->device_id );
+}
 #endif // SA_DEBUG
 	unsigned int i, j;
 	SIOT_MESH_ROUTE_UPDATE route_update;
@@ -2097,4 +2117,48 @@ void siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t
 }
 
 
-#endif // NEW_UPDATE_PROCESSING
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void siot_mesh_at_root_check_routes_to_retransmitters( const sa_time_val* currt, sa_time_val* time_to_next_event )
+{
+	sa_time_val diff_tval;
+
+	if ( sa_hal_time_val_is_less_eq( &(routing_to_retransmitter.next_check_time), currt ) )
+	{
+		SIOT_MESH_ROUTING_DATA_ITERATOR root_data;
+		uint8_t ret_code = siot_mesh_at_root_get_device_data( 0, root_data );
+		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK );
+
+		unsigned int i;
+		for ( i=0; i<mesh_routing_data.size(); i++ )
+			if ( mesh_routing_data[i].is_retransmitter )
+			{
+				uint16_t link_id;
+				uint8_t ret_code = siot_mesh_at_root_target_to_link_id( mesh_routing_data[i].device_id, &link_id );
+				if ( ret_code != SIOT_MESH_RET_ERROR_NOT_FOUND )
+				{
+					mesh_routing_data[i].from_santa_sequence_started = false;
+					continue;
+				}
+
+				if ( mesh_routing_data[i].from_santa_sequence_started )
+				{
+					if ( sa_hal_time_val_is_less( currt, &(mesh_routing_data[i].time_to_sent_next_from_santa) ) )
+						continue;
+				}
+
+				mesh_routing_data[i].from_santa_sequence_started = true;
+				TIME_MILLISECONDS16_TO_TIMEVAL( MESH_CHECK_ROUTS_TO_RETRANSMITTERS, diff_tval );
+				sa_hal_time_val_copy_from( &(mesh_routing_data[i].time_to_sent_next_from_santa), currt );
+				SA_TIME_INCREMENT_BY_TICKS( mesh_routing_data[i].time_to_sent_next_from_santa, diff_tval );
+
+				siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, time_to_next_event, MEMORY_HANDLE_INVALID, mesh_routing_data[i].device_id );
+			}
+
+		TIME_MILLISECONDS16_TO_TIMEVAL( MESH_CHECK_ROUTS_TO_RETRANSMITTERS, diff_tval );
+		sa_hal_time_val_copy_from( &(routing_to_retransmitter.next_check_time), currt );
+		SA_TIME_INCREMENT_BY_TICKS( routing_to_retransmitter.next_check_time, diff_tval );
+	}
+
+	sa_hal_time_val_get_remaining_time( currt, &(routing_to_retransmitter.next_check_time), time_to_next_event );
+}

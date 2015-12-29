@@ -117,7 +117,9 @@ int main_loop()
 		sagdp_init( &(devices[dev_in_use].sagdp_context_app) );
 		sagdp_init( &(devices[dev_in_use].sagdp_context_ctr) );
 	}
-	siot_mesh_init_tables();
+		
+	HAL_GET_TIME( &(currt), TIME_REQUEST_POINT__INIT );
+	siot_mesh_init_tables( &currt );
 		
 	uint16_t bus_id = 0xFFFF;
 	uint16_t target_device_id;

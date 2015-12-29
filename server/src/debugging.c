@@ -15,6 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
+#include "debugging.h"
 #include <simpleiot/siot_common.h>
 #include <simpleiot_hal/siot_eeprom.h>
 #include <zepto_mem_mngmt_hal_spec.h>
@@ -348,7 +349,6 @@ void request_eeprom_state()
 #endif // USE_TIME_MASTER_REGISTER
 
 typedef struct _GETTIME_CALL_POINT { const char* file; uint16_t line;  } GETTIME_CALL_POINT;
-#define TIME_REQUEST_POINT_MAX 4
 static GETTIME_CALL_POINT gettime_call_points[TIME_REQUEST_POINT_MAX];
 void check_get_time_call_point( uint8_t call_point, const char* file, uint16_t line )
 {

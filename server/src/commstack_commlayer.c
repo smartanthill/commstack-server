@@ -285,8 +285,6 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 	memory_object_cut_and_make_response( mem_h, 0, sz );
 
 	ZEPTO_DEBUG_ASSERT( packet_src == 38 || packet_src == 40 );
-	if ( packet_src == 38 )
-		return COMMLAYER_RET_OK_AS_CU;
 	if ( packet_src == 40 )
 	{
 #ifdef SA_DEBUG
@@ -298,8 +296,10 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 		ZEPTO_DEBUG_PRINTF_2( "%02x ", rsp[i] );
 	ZEPTO_DEBUG_PRINTF_1( "\n" );
 #endif
-		return COMMLAYER_RET_OK_AS_SLAVE;
+		return COMMLAYER_RET_OK_SLAVE_FOR_CU;
 	}
+	if ( packet_src == 38 )
+		return COMMLAYER_RET_OK_CU_FOR_SLAVE;
 	return ret;
 }
 

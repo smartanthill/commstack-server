@@ -313,67 +313,52 @@ void dbg_siot_mesh_at_root_print_all_device_tables()
 
 ///////////////////   Basic calls: initializing  //////////////////////
 
-void siot_mesh_init_tables( sa_time_val* currt )  // TODO: this call reflects current development stage and may or may not survive in the future
+void siot_mesh_at_root_init( sa_time_val* currt )
 {
-	// manual device adding
-	// as soon as pairing is implemented below code will be removed or heavily revised
+	sa_time_val diff_tval;
+	TIME_MILLISECONDS16_TO_TIMEVAL( MESH_CHECK_ROUTS_TO_RETRANSMITTERS, diff_tval );
+	sa_hal_time_val_copy_from( &(routing_to_retransmitter.next_check_time), currt );
+	SA_TIME_INCREMENT_BY_TICKS( routing_to_retransmitter.next_check_time, diff_tval );
 
+	// add root device entry
 	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA data;
+	data.device_id = 0;
+	data.is_retransmitter = false;
+	data.bus_type_list.push_back( 0 );
+	data.from_santa_sequence_started = false;
+	data.last_from_santa_request_id = 0;
+
 #ifdef SIOT_MESH_BTLE_MODE
 	data.last_reconnect_req_id = 0;
 	data.last_reconnect_req_id_is_valid = false;
 #endif
 
-	data.from_santa_sequence_started = false;
-
-	// 0. Root device
-	data.device_id = 0;
-	data.is_retransmitter = false;
-	data.last_from_santa_request_id = 0;
-	data.bus_type_list.push_back( 1 );
 	mesh_routing_data.push_back( data );
-
-	// 1. retransmitter
-	data.device_id = 1;
-	data.is_retransmitter = true;
-	data.last_from_santa_request_id = 0;
-	data.bus_type_list.clear();
-	data.bus_type_list.push_back( 0 );
-	data.bus_type_list.push_back( 1 );
-	mesh_routing_data.push_back( data );
-
-	// 2-5. terminating
-	data.is_retransmitter = false;
-	data.last_from_santa_request_id = 0;
-	data.device_id = 2;
-	data.bus_type_list.clear();
-	data.bus_type_list.push_back( 1 );
-	mesh_routing_data.push_back( data );
-	data.device_id = 3;
-	mesh_routing_data.push_back( data );
-	data.device_id = 4;
-	mesh_routing_data.push_back( data );
-	data.device_id = 5;
-	mesh_routing_data.push_back( data );
-
-	// regular checks routing_to_retransmitter
-	sa_time_val diff_tval;
-	TIME_MILLISECONDS16_TO_TIMEVAL( MESH_CHECK_ROUTS_TO_RETRANSMITTERS, diff_tval );
-	sa_hal_time_val_copy_from( &(routing_to_retransmitter.next_check_time), currt );
-	SA_TIME_INCREMENT_BY_TICKS( routing_to_retransmitter.next_check_time, diff_tval );
 }
 
 ///////////////////   Basic calls: device list  //////////////////////
-/*
-uint8_t siot_mesh_at_root_add_device( uint16_t device_id )
+
+uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitter, uint8_t* bus_types, uint16_t bus_type_cnt )
 {
-	uint16_t i;
-	for ( i=0; i<mesh_routing_data.size(); i++)
+	unsigned int i;
+	for ( i=0; i<mesh_routing_data.size(); i++ )
 		if ( mesh_routing_data[i].device_id == device_id )
 			return SIOT_MESH_AT_ROOT_RET_ALREADY_EXISTS;
-	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA dev_data;
-	dev_data.device_id = device_id;
-	mesh_routing_data.push_back( dev_data );
+	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA data;
+	data.device_id = device_id;
+	data.is_retransmitter = is_retransmitter != 0;
+	for ( i=0; i<bus_type_cnt; i++ )
+		data.bus_type_list.push_back( bus_types[i] );
+	data.from_santa_sequence_started = false;
+	data.last_from_santa_request_id = 0;
+
+#ifdef SIOT_MESH_BTLE_MODE
+	data.last_reconnect_req_id = 0;
+	data.last_reconnect_req_id_is_valid = false;
+#endif
+
+	mesh_routing_data.push_back( data );
+
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
@@ -388,7 +373,7 @@ uint8_t siot_mesh_at_root_remove_device( uint16_t device_id )
 		}
 	return SIOT_MESH_AT_ROOT_RET_NOT_FOUND;
 }
-*/
+
 uint8_t siot_mesh_at_root_get_device_data( uint16_t device_id, SIOT_MESH_ROUTING_DATA_ITERATOR& it )
 {
 	for ( it = mesh_routing_data.begin(); it != mesh_routing_data.end(); ++it )

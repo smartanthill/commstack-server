@@ -25,11 +25,18 @@ void FAKE_INITIALIZE_DEVICES() // NOTE: here we do a quick jump ove pairing (or 
 	uint16_t i, j;
 	uint8_t base_key[16] = { 	0x00, 0x01,	0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, };
 	uint8_t tmp_key[16];
+	uint8_t bus_types[2];
+	bus_types[0] = 0;
+	bus_types[1] = 1;
 	for ( i=0; i<MAX_INSTANCES_SUPPORTED; i++ )
 	{
 		for ( j=0; j<16; j++ )
 			tmp_key[j] = base_key[j] + ( (i+1) << 4 );
 		main_add_new_device( i+1, tmp_key );
+		if ( i == 0 )
+			siot_mesh_at_root_add_device( i+1, 1, bus_types, 2 );
+		else
+			siot_mesh_at_root_add_device( i+1, 0, bus_types+1, 1 );
 	}
 }
 
@@ -75,10 +82,10 @@ int main_loop()
 		sagdp_init( &(device->sagdp_context_ctr) );
 	}*/
 		
+	siot_mesh_at_root_init( &currt );
 	FAKE_INITIALIZE_DEVICES();
 
 	HAL_GET_TIME( &(currt), TIME_REQUEST_POINT__INIT );
-	siot_mesh_init_tables( &currt );
 		
 	uint16_t bus_id = 0xFFFF;
 	uint16_t target_device_id;

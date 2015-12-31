@@ -16,9 +16,12 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 #include "commstack_commlayer.h"
+#include "commstack_commlayer_helper.h"
 #include <stdio.h>
 
 #define MAX_PACKET_SIZE 80
+
+uint8_t sync_status = COMMLAYER_SYNC_STATUS_GO_THROUGH;
 
 
 #include <stdio.h>
@@ -253,7 +256,7 @@ uint8_t try_get_packet_header_within_master_loop( uint8_t* buff, uint16_t sz )
 
 }
 
-uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
+uint8_t internal_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 {
 	// do cleanup
 	memory_object_response_to_request( mem_h );
@@ -303,6 +306,27 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 	return ret;
 }
 
+uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
+{
+	if ( cscl_is_queued_packet() == COMMLAYER_SYNC_STATUS_OK )
+	{
+		uint16_t sz;
+		uint8_t ret_code, ret_out;
+		ret_code = cscl_get_oldest_packet_size( &sz );
+		ZEPTO_DEBUG_ASSERT( ret_code == COMMLAYER_SYNC_STATUS_OK );
+		zepto_parser_free_memory( mem_h );
+		uint8_t* buff = memory_object_prepend( mem_h, sz );
+		ZEPTO_DEBUG_ASSERT( buff != NULL );
+		ret_code = cscl_get_oldest_packet_and_remove_from_queue( &ret_out, &sz, bus_id, buff, sz );
+		ZEPTO_DEBUG_ASSERT( ret_code == COMMLAYER_SYNC_STATUS_OK );
+		return ret_out;
+	}
+	else
+	{
+		return internal_try_get_message_within_master( mem_h, bus_id );
+	}
+}
+
 uint8_t send_within_master( MEMORY_HANDLE mem_h, uint16_t bus_id, uint8_t destination )
 {
 	ZEPTO_DEBUG_PRINTF_1( "send_within_master() called...\n" );
@@ -344,7 +368,7 @@ uint8_t send_within_master( MEMORY_HANDLE mem_h, uint16_t bus_id, uint8_t destin
 
 
 //uint8_t wait_for_communication_event( unsigned int timeout )
-uint8_t wait_for_communication_event( waiting_for* wf )
+uint8_t internal_wait_for_communication_event( waiting_for* wf )
 {
 	unsigned int timeout = wf->wait_time.high_t;
 	timeout <<= 16;
@@ -393,6 +417,13 @@ uint8_t wait_for_communication_event( waiting_for* wf )
 	}
 }
 
+uint8_t wait_for_communication_event( waiting_for* wf )
+{
+	if ( cscl_is_queued_packet() == COMMLAYER_SYNC_STATUS_OK )
+		return COMMLAYER_RET_FROM_CENTRAL_UNIT;
+	return internal_wait_for_communication_event( wf );
+}
+
 uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 {
 #ifdef SA_DEBUG
@@ -405,17 +436,49 @@ uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 	ZEPTO_DEBUG_PRINTF_1( "\n" );
 #endif
 	ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
-	return send_within_master( mem_h, bus_id, 35 );
+	return send_within_master( mem_h, bus_id, COMMLAYER_STATUS_FOR_CU_FROM_SLAVE );
 }
 
 uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
-	return send_within_master( mem_h, src_id, 37 );
+	return send_within_master( mem_h, src_id, COMMLAYER_STATUS_FOR_SLAVE );
 }
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
-	return send_within_master( mem_h, src_id, 47 );
+	return send_within_master( mem_h, src_id, COMMLAYER_STATUS_FOR_CU_SLAVE_ERROR );
+}
+
+void send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
+{
+	static uint16_t packet_id = 0;
+	packet_id++;
+	uint8_t ret_code_send = send_within_master( mem_h, packet_id, COMMLAYER_STATUS_FOR_CU_SYNC_REQUEST );
+	ZEPTO_DEBUG_ASSERT( ret_code_send == COMMLAYER_RET_OK );
+	sync_status = COMMLAYER_SYNC_STATUS_WAIT_FOR_REPLY;
+	waiting_for wf;
+	uint8_t ret_code;
+	MEMORY_HANDLE tmp_mem_h = acquire_memory_handle();
+	uint16_t addr;
+	uint8_t ret_code_get;
+	do
+	{
+		wf.wait_packet = 1;
+		wf.wait_time.high_t = 0xFFFF;
+		wf.wait_time.low_t = 0xFFFF;
+		ret_code = internal_wait_for_communication_event( &wf );
+		ZEPTO_DEBUG_ASSERT( ret_code == COMMLAYER_RET_FROM_CENTRAL_UNIT ); // with infinite timeout the third option is connection failure
+		
+		ret_code_get = try_get_message_within_master( tmp_mem_h, &addr );
+		if ( ret_code_get == COMMLAYER_RET_OK_SYNC_CONFIRMATION && addr == packet_id )
+			break;
+		// TODO: check packet
+		uint8_t* data = memory_object_get_response_ptr( tmp_mem_h );
+		uint16_t sz = memory_object_get_response_size( tmp_mem_h );
+		cscl_add_new_packet_to_queue( ret_code_get, sz, addr, data );
+	}
+	while ( 1 );
+	release_memory_handle( tmp_mem_h );
 }
 
 // from comm.stack: 35: intended for slave; 37: intended for central unit

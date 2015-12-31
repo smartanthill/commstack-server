@@ -25,11 +25,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <simpleiot/siot_s_protocol.h>
 #include <simpleiot/siot_gd_protocol.h>
 #include <simpleiot/siot_m_protocol.h>
-//#include "saccp_protocol_client_side.h"
-//#include "test_generator.h"
 #include <stdio.h>
-//#include "sa_config.h"
-#include "hal_commstack_persistent_storage.h"
 #include "debugging.h"
 
 #include <stdlib.h>     /* atoi */

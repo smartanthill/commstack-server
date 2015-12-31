@@ -864,6 +864,7 @@ int main(int argc, char *argv[])
 	if ( !HAL_COMMUNICATION_INITIALIZE() )
 		return -1;
 
+#if 0
 	// TODO: logic of accessing/intializing persistent storage must be totally revised toward more secure version
 //	if (!init_eeprom_access())
 //		return 0;
@@ -940,6 +941,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+#endif // 0
 
 //	DEBUG_ON_EEPROM_INIT();
 

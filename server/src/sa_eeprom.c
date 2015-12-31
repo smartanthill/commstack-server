@@ -15,17 +15,11 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#include "sa_eeprom.h"
-#include <hal_eeprom.h>
+#include <simpleiot/siot_common.h>
 #include <simpleiot_hal/siot_mem_mngmt.h>
 #include "commstack_commlayer.h"
 
 #define EEPROM_CHECKSUM_SIZE 4
-#define EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE 16
-
-// slot structure: | data | checksum | data | checksum |
-
-#define SLOT_SIZE_FROM_DATA_SIZE( x ) ( 2 * ( (x) + EEPROM_CHECKSUM_SIZE ) )
 
 
 void update_fletcher_checksum_16( uint8_t bt, uint16_t* state )
@@ -100,140 +94,7 @@ void calculate_checksum( const uint8_t* buff, uint16_t sz, uint8_t* checksum )
 }
 
 
-typedef struct _eeprom_slot_descriptor
-{
-	uint16_t offset;
-	uint16_t data_size;
-} eeprom_slot_descriptor;
-
-#define ITEM_MAX_SUPPORTED 32
-
-const eeprom_slot_descriptor eeprom_slots[ ITEM_MAX_SUPPORTED ] ZEPTO_PROG_CONSTANT_LOCATION =
-{
-	{DATA_REINCARNATION_ID_SIZE * 2, DATA_SASP_NONCE_LW_SIZE},
-	{DATA_REINCARNATION_ID_SIZE * 2 + SLOT_SIZE_FROM_DATA_SIZE( DATA_SASP_NONCE_LW_SIZE ), DATA_SASP_NONCE_LS_SIZE },
-};
-
-#define ITEM_OFFSET( item ) ( DATA_REINCARNATION_ID_SIZE * 2 + (item) * ( SLOT_SIZE_FROM_DATA_SIZE( DATA_SASP_NONCE_LW_SIZE ) + SLOT_SIZE_FROM_DATA_SIZE( DATA_SASP_NONCE_LS_SIZE ) ) )
-
-
-
-bool init_eeprom_access()
-{
-	return hal_init_eeprom_access();
-}
-
-bool eeprom_verify_checksum( uint16_t offset, uint16_t sz )
-{
-	uint8_t buff[EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE];
-	uint8_t checksum_calculated[ EEPROM_CHECKSUM_SIZE ];
-	uint8_t checksum_read[ EEPROM_CHECKSUM_SIZE ];
-	ZEPTO_DEBUG_ASSERT( sz <= EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE );
-	ZEPTO_DEBUG_ASSERT( sizeof( checksum_calculated) == EEPROM_CHECKSUM_SIZE );
-	ZEPTO_DEBUG_ASSERT( sizeof( checksum_read) == EEPROM_CHECKSUM_SIZE );
-	hal_eeprom_read( buff, sz, offset );
-	offset += sz;
-	calculate_checksum( buff, sz, checksum_calculated );
-	hal_eeprom_read( (uint8_t*)checksum_read, EEPROM_CHECKSUM_SIZE, offset );
-	return is_same_checksum( checksum_read, checksum_calculated );
-}
-
-void eeprom_copy_block( uint16_t target_offset, uint16_t src_offset, uint16_t sz )
-{
-	uint8_t buff[EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE];
-	ZEPTO_DEBUG_ASSERT( sz <= EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE );
-	hal_eeprom_read( buff, sz, src_offset );
-	hal_eeprom_write( buff, sz, target_offset );
-}
-
-bool eeprom_are_blocks_same( uint16_t offset1, uint16_t offset2, uint16_t sz )
-{
-	uint8_t buff1[EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE];
-	uint8_t buff2[EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE];
-	ZEPTO_DEBUG_ASSERT( sz <= EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE );
-	hal_eeprom_read( buff1, sz, offset1 );
-	hal_eeprom_read( buff2, sz, offset2 );
-//	return ZEPTO_MEMCMP( buff1, buff2, EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE ) == 0;
-	return ZEPTO_MEMCMP( buff1, buff2, sz ) == 0;
-}
-
-bool eeprom_check_restore_slot( uint8_t id, uint16_t item )
-{
-	uint16_t offset = ITEM_OFFSET( item ) + eeprom_slots[id].offset;
-	uint16_t data_sz = eeprom_slots[id].data_size;
-	bool ok1, ok2;
-	ZEPTO_DEBUG_ASSERT( id < EEPROM_SLOT_MAX );
-
-	ok1 = eeprom_verify_checksum( offset, data_sz );
-	offset += data_sz + EEPROM_CHECKSUM_SIZE;
-	ok2 = eeprom_verify_checksum( offset, data_sz );
-
-	offset = ITEM_OFFSET( item ) + eeprom_slots[id].offset;
-
-	if ( ok1 && ok2 )
-	{
-		if ( eeprom_are_blocks_same( offset, offset + data_sz + EEPROM_CHECKSUM_SIZE, data_sz + EEPROM_CHECKSUM_SIZE ) )
-			return true;
-		eeprom_copy_block( offset +  data_sz + EEPROM_CHECKSUM_SIZE, offset, data_sz + EEPROM_CHECKSUM_SIZE );
-		return true;
-	}
-
-	if ( (!ok1) && (!ok2) )
-		return false;
-
-	if ( !ok1 )
-	{
-		ZEPTO_DEBUG_ASSERT( ok2 );
-		eeprom_copy_block( offset, offset +  data_sz + EEPROM_CHECKSUM_SIZE, data_sz + EEPROM_CHECKSUM_SIZE );
-		return true;
-	}
-
-	ZEPTO_DEBUG_ASSERT( ok1 );
-	eeprom_copy_block( offset +  data_sz + EEPROM_CHECKSUM_SIZE, offset, data_sz + EEPROM_CHECKSUM_SIZE );
-	return true;
-}
-
-bool eeprom_is_same_in_eeprom( uint16_t offset, uint8_t* mem, uint16_t sz )
-{
-	uint8_t buff[EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE];
-	ZEPTO_DEBUG_ASSERT( sz <= EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE );
-	hal_eeprom_read( buff, sz, offset );
-	return ZEPTO_MEMCMP( buff, mem, sz ) == 0;
-}
-
-uint8_t eeprom_check_reincarnation( uint8_t* rid )
-{
-	bool ok1 = eeprom_is_same_in_eeprom( 0, rid, DATA_REINCARNATION_ID_SIZE );
-	bool ok2 = eeprom_is_same_in_eeprom( DATA_REINCARNATION_ID_SIZE, rid, DATA_REINCARNATION_ID_SIZE );
-	if ( ok1 && ok2 )
-		return EEPROM_RET_REINCARNATION_ID_OK_BOTH_OK;
-	return (ok1 || ok2) ? EEPROM_RET_REINCARNATION_ID_OK_ONE_OK : EEPROM_RET_REINCARNATION_ID_OLD;
-}
-
-bool eeprom_check_at_start()
-{
-	uint8_t i, j;
-	bool ok;
-	ZEPTO_DEBUG_ASSERT( ( EEPROM_CHECKSUM_SIZE & 1 ) == 0 ); // even number
-	for ( j=0; j<ITEM_MAX_SUPPORTED; j++ )
-		for ( i=0; i<EEPROM_SLOT_MAX; i++ )
-		{
-			ok = eeprom_check_restore_slot( i, j );
-			if (!ok )
-				return false;
-		}
-	return true;
-}
-
-void eeprom_update_reincarnation_if_necessary( uint8_t* rid )
-{
-	if ( ! eeprom_is_same_in_eeprom( 0, rid, DATA_REINCARNATION_ID_SIZE ) )
-		hal_eeprom_write( rid, DATA_REINCARNATION_ID_SIZE, 0 );
-	if ( ! eeprom_is_same_in_eeprom( DATA_REINCARNATION_ID_SIZE, rid, DATA_REINCARNATION_ID_SIZE ) )
-		hal_eeprom_write( rid, DATA_REINCARNATION_ID_SIZE, DATA_REINCARNATION_ID_SIZE );
-}
-
-void eeprom_write( uint8_t device_id, uint16_t item, uint16_t sz, uint8_t* data )
+void eeprom_write( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data )
 {
 	MEMORY_HANDLE mem_h = acquire_memory_handle();
 	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
@@ -249,28 +110,9 @@ void eeprom_write( uint8_t device_id, uint16_t item, uint16_t sz, uint8_t* data 
 	send_sync_request_to_central_unit_to_save_data( mem_h, device_id, item );
 
 	release_memory_handle( mem_h );
-#if 0
-	uint8_t checksum[ EEPROM_CHECKSUM_SIZE ]; init_checksum( checksum );
-	uint16_t offset = ITEM_OFFSET( item ) + eeprom_slots[id].offset;
-	ZEPTO_DEBUG_ASSERT( id < EEPROM_SLOT_MAX );
-	ZEPTO_DEBUG_ASSERT( sizeof( checksum) == EEPROM_CHECKSUM_SIZE );
-	calculate_checksum( data, eeprom_slots[id].data_size, checksum );
-
-	hal_eeprom_write( data, eeprom_slots[id].data_size, offset );
-	offset += eeprom_slots[id].data_size;
-	hal_eeprom_write( (uint8_t*)checksum, EEPROM_CHECKSUM_SIZE, offset );
-	offset += EEPROM_CHECKSUM_SIZE;
-	hal_eeprom_flush();
-
-	hal_eeprom_write( data, eeprom_slots[id].data_size, offset );
-	offset += eeprom_slots[id].data_size;
-	hal_eeprom_write( (uint8_t*)checksum, EEPROM_CHECKSUM_SIZE, offset );
-	offset += EEPROM_CHECKSUM_SIZE;
-	hal_eeprom_flush();
-#endif // 0
 }
 
-void eeprom_read( uint8_t device_id, uint16_t item, uint16_t sz, uint8_t* data )
+void eeprom_read( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data )
 {
 	MEMORY_HANDLE mem_h = acquire_memory_handle();
 	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
@@ -278,7 +120,7 @@ void eeprom_read( uint8_t device_id, uint16_t item, uint16_t sz, uint8_t* data )
 
 	uint8_t checksum_calculated[ EEPROM_CHECKSUM_SIZE ];
 	uint8_t checksum_read[ EEPROM_CHECKSUM_SIZE ];
-	parser_obj po, po1;
+	parser_obj po;
 	zepto_parser_init( &po, mem_h );
 	uint16_t full_sz = zepto_parsing_remaining_bytes( &po );
 	ZEPTO_DEBUG_ASSERT( full_sz >= EEPROM_CHECKSUM_SIZE );
@@ -290,105 +132,4 @@ void eeprom_read( uint8_t device_id, uint16_t item, uint16_t sz, uint8_t* data )
 	bool same = is_same_checksum( checksum_read, checksum_calculated );
 	ZEPTO_DEBUG_ASSERT( same ); // TODO: what should we do in production mode in case of failure?
 	ZEPTO_DEBUG_ASSERT( sz == full_sz - EEPROM_CHECKSUM_SIZE ); // TODO: what should we do in production mode in case of failure?
-
-#if 0
-	uint8_t checksum_calculated[ EEPROM_CHECKSUM_SIZE ];
-	uint8_t checksum_read[ EEPROM_CHECKSUM_SIZE ];
-	uint16_t offset = ITEM_OFFSET( item ) + eeprom_slots[id].offset;
-	ZEPTO_DEBUG_ASSERT( sizeof( checksum_calculated) == EEPROM_CHECKSUM_SIZE );
-	ZEPTO_DEBUG_ASSERT( sizeof( checksum_read) == EEPROM_CHECKSUM_SIZE );
-	ZEPTO_DEBUG_ASSERT( id < EEPROM_SLOT_MAX );
-
-	hal_eeprom_read( data, eeprom_slots[id].data_size, offset );
-	offset += eeprom_slots[id].data_size;
-	hal_eeprom_read( (uint8_t*)checksum_read, EEPROM_CHECKSUM_SIZE, offset );
-	offset += EEPROM_CHECKSUM_SIZE;
-	init_checksum( checksum_calculated );
-	calculate_checksum( data, eeprom_slots[id].data_size, checksum_calculated );
-	if ( is_same_checksum( checksum_read, checksum_calculated ) )
-		return;
-
-	ZEPTO_DEBUG_ASSERT( 0 == "eeprom slot might be corrupted" );
-
-	hal_eeprom_read( data, eeprom_slots[id].data_size, offset );
-	offset += eeprom_slots[id].data_size;
-	hal_eeprom_read( (uint8_t*)checksum_read, EEPROM_CHECKSUM_SIZE, offset );
-	offset += EEPROM_CHECKSUM_SIZE;
-	init_checksum( checksum_calculated );
-	calculate_checksum( data, eeprom_slots[id].data_size, checksum_calculated );
-	if ( is_same_checksum( checksum_read, checksum_calculated ) )
-		return;
-
-	ZEPTO_DEBUG_ASSERT( 0 == "eeprom slot is corrupted" );
-#endif // 0
 }
-
-#if 0
-uint16_t eeprom_serialize( uint8_t* buff )
-{
-	uint8_t* buff_start = buff;
-	if ( buff != NULL )
-	{
-		// reincarnation data
-		buff[0] = DATA_REINCARNATION_ID_SIZE;
-		buff++;
-		hal_eeprom_read( buff, DATA_REINCARNATION_ID_SIZE, 0 );
-		buff += DATA_REINCARNATION_ID_SIZE;
-
-		// repeat for each item
-		uint16_t i;
-		for ( i=0; i<ITEM_MAX_SUPPORTED; i++ )
-		{
-			// EEPROM_SLOT_DATA_SASP_NONCE_LW_ID
-			buff[0] = EEPROM_SLOT_DATA_SASP_NONCE_LW_ID;
-			buff[1] = DATA_SASP_NONCE_LW_SIZE;
-			buff += 2;
-			eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, buff, i);
-			buff += DATA_SASP_NONCE_LW_SIZE;
-			// EEPROM_SLOT_DATA_SASP_NONCE_LS_ID
-			buff[0] = EEPROM_SLOT_DATA_SASP_NONCE_LS_ID;
-			buff[1] = DATA_SASP_NONCE_LS_SIZE;
-			buff += 2;
-			eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, buff, i);
-			buff += DATA_SASP_NONCE_LS_SIZE;
-		}
-
-		return buff - buff_start;
-	}
-	else
-	{
-		return DATA_REINCARNATION_ID_SIZE + 1 + ITEM_MAX_SUPPORTED * ( 2 + DATA_SASP_NONCE_LW_SIZE + 2 + DATA_SASP_NONCE_LS_SIZE );
-	}
-
-}
-
-void eeprom_deserialize( uint8_t* buff, uint16_t sz )
-{
-	// TODO: soon or later we will have to switch to dynamical model... this is a quite temporary solution
-	uint8_t* end = buff + sz;
-	ZEPTO_DEBUG_ASSERT( buff[0] == DATA_REINCARNATION_ID_SIZE );
-	buff++;
-	hal_eeprom_write( buff, DATA_REINCARNATION_ID_SIZE, 0 );
-	buff += DATA_REINCARNATION_ID_SIZE;
-
-	// repeat for each item
-	uint16_t i;
-	for ( i=0; i<ITEM_MAX_SUPPORTED; i++ )
-	{
-		ZEPTO_DEBUG_ASSERT( buff < end );
-		// EEPROM_SLOT_DATA_SASP_NONCE_LW_ID
-		ZEPTO_DEBUG_ASSERT( buff[0] == EEPROM_SLOT_DATA_SASP_NONCE_LW_ID );
-		ZEPTO_DEBUG_ASSERT( buff[1] == DATA_SASP_NONCE_LW_SIZE );
-		buff += 2;
-		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, buff, i);
-		buff += DATA_SASP_NONCE_LW_SIZE;
-		// EEPROM_SLOT_DATA_SASP_NONCE_LS_ID
-		ZEPTO_DEBUG_ASSERT( buff[0] == EEPROM_SLOT_DATA_SASP_NONCE_LS_ID );
-		ZEPTO_DEBUG_ASSERT( buff[1] == DATA_SASP_NONCE_LS_SIZE );
-		buff += 2;
-		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, buff, i);
-		buff += DATA_SASP_NONCE_LS_SIZE;
-	}
-	ZEPTO_DEBUG_ASSERT( buff == end );
-}
-#endif // 0

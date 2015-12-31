@@ -27,11 +27,6 @@ Copyright (C) 2015 OLogN Technologies AG
 #define COMMLAYER_RET_FAILED 0
 #define COMMLAYER_RET_OK 1
 #define COMMLAYER_RET_PENDING 2
-#define COMMLAYER_RET_OK_CU_FOR_SLAVE 38
-#define COMMLAYER_RET_OK_SLAVE_FOR_CU 40
-#define COMMLAYER_RET_OK_INITIALIZER 50
-#define COMMLAYER_RET_OK_ADD_DEVICE 55
-#define COMMLAYER_RET_OK_SYNC_CONFIRMATION 57
 
 #define HAL_GET_PACKET_BYTES_IN_PROGRESS 0
 #define HAL_GET_PACKET_BYTES_FAILED 1
@@ -42,6 +37,14 @@ Copyright (C) 2015 OLogN Technologies AG
 #define COMMLAYER_RET_TIMEOUT 12
 
 #define COMMLAYER_RET_FROM_COMMM_STACK 10
+
+// received packet status
+#define COMMLAYER_RET_OK_CU_FOR_SLAVE 38
+#define COMMLAYER_RET_OK_SLAVE_FOR_CU 40
+#define COMMLAYER_RET_OK_INITIALIZER 50
+#define COMMLAYER_RET_OK_INITIALIZER_LAST 51
+#define COMMLAYER_RET_OK_ADD_DEVICE 55
+#define COMMLAYER_RET_OK_SYNC_CONFIRMATION 57
 
 // sent packet status
 #define COMMLAYER_STATUS_FOR_CU_FROM_SLAVE 35
@@ -70,6 +73,7 @@ uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
 void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id );
+void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id );
 
 #ifdef __cplusplus
 }

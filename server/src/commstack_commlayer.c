@@ -449,7 +449,7 @@ uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 	return send_within_master( mem_h, src_id, COMMLAYER_STATUS_FOR_CU_SLAVE_ERROR );
 }
 
-void send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
+void internal_send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 {
 	static uint16_t packet_id = 0;
 	packet_id++;
@@ -459,6 +459,7 @@ void send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 	waiting_for wf;
 	uint8_t ret_code;
 	MEMORY_HANDLE tmp_mem_h = acquire_memory_handle();
+	ZEPTO_DEBUG_ASSERT( tmp_mem_h != MEMORY_HANDLE_INVALID );
 	uint16_t addr;
 	uint8_t ret_code_get;
 	do
@@ -471,7 +472,10 @@ void send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 		
 		ret_code_get = try_get_message_within_master( tmp_mem_h, &addr );
 		if ( ret_code_get == COMMLAYER_RET_OK_SYNC_CONFIRMATION && addr == packet_id )
+		{
+			zepto_copy_response_to_response_of_another_handle( tmp_mem_h, mem_h );
 			break;
+		}
 		// TODO: check packet
 		uint8_t* data = memory_object_get_response_ptr( tmp_mem_h );
 		uint16_t sz = memory_object_get_response_size( tmp_mem_h );
@@ -479,6 +483,40 @@ void send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 	}
 	while ( 1 );
 	release_memory_handle( tmp_mem_h );
+}
+
+void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id )
+{
+	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+	uint16_t sz = memory_object_get_response_size( mem_h );
+	uint8_t* prefix = memory_object_prepend( mem_h, 6 );
+	prefix[0] = REQUEST_WRITE_DATA;
+	prefix[1] = (uint8_t)deice_id;
+	prefix[2] = (uint8_t)(deice_id>>8);
+	prefix[3] = field_id;
+	prefix[4] = (uint8_t)sz;
+	prefix[5] = (uint8_t)(sz>>8);
+	internal_send_sync_request_to_central_unit( mem_h );
+}
+
+void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id )
+{
+	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+	zepto_parser_free_memory( mem_h );
+	uint8_t* prefix = memory_object_prepend( mem_h, 4 );
+	prefix[0] = REQUEST_READ_DATA;
+	prefix[1] = (uint8_t)deice_id;
+	prefix[2] = (uint8_t)(deice_id>>8);
+	prefix[3] = field_id;
+	internal_send_sync_request_to_central_unit( mem_h );
+	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) >= 5 );
+
+/*	zepto_response_to_request( mem_h );
+	// packet_structure: | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+	uint8_t prefix_out[5];
+	parser_obj po;
+	zepto_parser_init( &po, mem_h );
+	zepto_parse_read_block( &po, prefix_out, prefix_out );*/
 }
 
 // from comm.stack: 35: intended for slave; 37: intended for central unit

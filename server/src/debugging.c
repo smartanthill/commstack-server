@@ -207,6 +207,7 @@ void register_time_val( uint8_t point_id, const sa_time_val* in, sa_time_val* ou
 	out->high_t = (out->high_t<<8) | data_in[3];
 }
 
+#if 0
 void register_eeprom_state()
 {
 	uint8_t ret;
@@ -226,7 +227,7 @@ void register_eeprom_state()
 	uint8_t data_offset = preanalyze_debug_packet( buff, packet_data_sz, &packet_data_sz, type_out );
 	ZEPTO_DEBUG_ASSERT( packet_data_sz == 0 );
 }
-
+#endif
 
 #else // USE_TIME_MASTER_REGISTER
 

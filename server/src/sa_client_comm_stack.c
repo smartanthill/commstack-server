@@ -871,7 +871,7 @@ int main(int argc, char *argv[])
 //	ZEPTO_MEMCPY( rid, device->AES_ENCRYPTION_KEY, DATA_REINCARNATION_ID_SIZE );
 	char* persistent_storage_path = get_persistent_storage_path_from_command_line( argc, argv );
 	uint8_t ret_code = hal_init_eeprom_access( persistent_storage_path );
-	uint16_t i;
+//	uint16_t i;
 	switch ( ret_code )
 	{
 		case HAL_PS_INIT_FAILED:
@@ -941,7 +941,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	DEBUG_ON_EEPROM_INIT();
+//	DEBUG_ON_EEPROM_INIT();
 
 	return main_loop();
 //	return 0;

@@ -49,6 +49,10 @@ Copyright (C) 2015 OLogN Technologies AG
 #define COMMLAYER_STATUS_FOR_CU_SLAVE_ERROR 47
 #define COMMLAYER_STATUS_FOR_CU_SYNC_REQUEST 55
 
+// REQUEST CODES
+#define REQUEST_WRITE_DATA 0
+#define REQUEST_READ_DATA 1
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,6 +69,7 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id );
 uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
+void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id );
 
 #ifdef __cplusplus
 }

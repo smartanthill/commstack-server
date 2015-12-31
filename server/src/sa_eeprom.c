@@ -17,6 +17,8 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "sa_eeprom.h"
 #include <hal_eeprom.h>
+#include <simpleiot_hal/siot_mem_mngmt.h>
+#include "commstack_commlayer.h"
 
 #define EEPROM_CHECKSUM_SIZE 4
 #define EEPROM_LOCAL_BUFF_FOR_CHECKUP_SIZE 16
@@ -231,8 +233,23 @@ void eeprom_update_reincarnation_if_necessary( uint8_t* rid )
 		hal_eeprom_write( rid, DATA_REINCARNATION_ID_SIZE, DATA_REINCARNATION_ID_SIZE );
 }
 
-void eeprom_write( uint8_t id, uint8_t* data, uint16_t item)
+void eeprom_write( uint8_t device_id, uint16_t item, uint16_t sz, uint8_t* data )
 {
+	MEMORY_HANDLE mem_h = acquire_memory_handle();
+	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+
+	uint8_t checksum[ EEPROM_CHECKSUM_SIZE ]; init_checksum( checksum );
+//	ZEPTO_DEBUG_ASSERT( id < EEPROM_SLOT_MAX );
+	ZEPTO_DEBUG_ASSERT( sizeof( checksum) == EEPROM_CHECKSUM_SIZE );
+	calculate_checksum( data, sz, checksum );
+	zepto_write_block( mem_h, data, sz );
+	zepto_write_block( mem_h, (uint8_t*)checksum, EEPROM_CHECKSUM_SIZE );
+	zepto_response_to_request( mem_h );
+
+	send_sync_request_to_central_unit_to_save_data( mem_h, device_id, item );
+
+	release_memory_handle( mem_h );
+#if 0
 	uint8_t checksum[ EEPROM_CHECKSUM_SIZE ]; init_checksum( checksum );
 	uint16_t offset = ITEM_OFFSET( item ) + eeprom_slots[id].offset;
 	ZEPTO_DEBUG_ASSERT( id < EEPROM_SLOT_MAX );
@@ -250,10 +267,31 @@ void eeprom_write( uint8_t id, uint8_t* data, uint16_t item)
 	hal_eeprom_write( (uint8_t*)checksum, EEPROM_CHECKSUM_SIZE, offset );
 	offset += EEPROM_CHECKSUM_SIZE;
 	hal_eeprom_flush();
+#endif // 0
 }
 
-void eeprom_read( uint8_t id, uint8_t* data, uint16_t item)
+void eeprom_read( uint8_t device_id, uint16_t item, uint16_t sz, uint8_t* data )
 {
+	MEMORY_HANDLE mem_h = acquire_memory_handle();
+	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+	send_sync_request_to_central_unit_to_get_data( mem_h, device_id, item );
+
+	uint8_t checksum_calculated[ EEPROM_CHECKSUM_SIZE ];
+	uint8_t checksum_read[ EEPROM_CHECKSUM_SIZE ];
+	parser_obj po, po1;
+	zepto_parser_init( &po, mem_h );
+	uint16_t full_sz = zepto_parsing_remaining_bytes( &po );
+	ZEPTO_DEBUG_ASSERT( full_sz >= EEPROM_CHECKSUM_SIZE );
+	zepto_parse_read_block( &po, data, full_sz - EEPROM_CHECKSUM_SIZE );
+	zepto_parse_read_block( &po, checksum_read, EEPROM_CHECKSUM_SIZE );
+
+	init_checksum( checksum_calculated );
+	calculate_checksum( data, full_sz - EEPROM_CHECKSUM_SIZE, checksum_calculated );
+	bool same = is_same_checksum( checksum_read, checksum_calculated );
+	ZEPTO_DEBUG_ASSERT( same ); // TODO: what should we do in production mode in case of failure?
+	ZEPTO_DEBUG_ASSERT( sz == full_sz - EEPROM_CHECKSUM_SIZE ); // TODO: what should we do in production mode in case of failure?
+
+#if 0
 	uint8_t checksum_calculated[ EEPROM_CHECKSUM_SIZE ];
 	uint8_t checksum_read[ EEPROM_CHECKSUM_SIZE ];
 	uint16_t offset = ITEM_OFFSET( item ) + eeprom_slots[id].offset;
@@ -282,8 +320,10 @@ void eeprom_read( uint8_t id, uint8_t* data, uint16_t item)
 		return;
 
 	ZEPTO_DEBUG_ASSERT( 0 == "eeprom slot is corrupted" );
+#endif // 0
 }
 
+#if 0
 uint16_t eeprom_serialize( uint8_t* buff )
 {
 	uint8_t* buff_start = buff;
@@ -351,3 +391,4 @@ void eeprom_deserialize( uint8_t* buff, uint16_t sz )
 	}
 	ZEPTO_DEBUG_ASSERT( buff == end );
 }
+#endif // 0

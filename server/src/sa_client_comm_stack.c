@@ -82,18 +82,19 @@ int main_loop()
 		sagdp_init( &(device->sagdp_context_ctr) );
 	}*/
 		
-	siot_mesh_at_root_init( &currt );
-	FAKE_INITIALIZE_DEVICES();
 
 	HAL_GET_TIME( &(currt), TIME_REQUEST_POINT__INIT );
+	siot_mesh_at_root_init( &currt );
+//	FAKE_INITIALIZE_DEVICES();
 		
 	uint16_t bus_id = 0xFFFF;
 	uint16_t target_device_id;
 	bool for_ctr = 0;
 
-#if 0
+#if 1
 	// INITIALIZING LOOP
-	for (;;)
+	bool init_loop_done = false;
+	do
 	{
 		ret_code = HAL_WAIT_FOR_COMM_EVENT( &wait_for );
 		SA_TIME_SET_INFINITE_TIME( wait_for.wait_time );
@@ -109,25 +110,42 @@ int main_loop()
 				{
 					case COMMLAYER_RET_FAILED:
 						return 0;
-					case COMMLAYER_RET_OK_INITIALIZER:
+					case COMMLAYER_FROM_CU_STATUS_INITIALIZER:
 					{
-						// | 2 bytes: dev_id (low, high) | 1 byte: is_retransmitter | 16 bytes: enc_key |
+						// | device_id (2 bytes, low, high) | key (16 bytes) | is_retransmitter (1 byte) | bus_type_count (1 byte) | bus_type_list (variable size) |
 						zepto_response_to_request(  working_handle.packet_h );
-						ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_CU\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
-						dev_in_use = param;
-//						dev_in_use --;
-//						ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
-						device = main_get_device_data_by_index( dev_in_use );
-						goto client_received;
+						ZEPTO_DEBUG_PRINTF_3( "\'packet_status == COMMLAYER_FROM_CU_STATUS_INITIALIZER\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+						parser_obj po;
+						zepto_parser_init( &po, working_handle.packet_h );
+						ZEPTO_DEBUG_ASSERT( zepto_parsing_remaining_bytes( &po ) >= 20 );
+						uint8_t tmp = zepto_parse_uint8( &po );
+						uint16_t dev_id = zepto_parse_uint8( &po );
+						dev_id <<= 8;
+						dev_id += tmp;
+						uint8_t key[16];
+						zepto_parse_read_block( &po, key, 16 );
+						uint8_t is_retransmitter = zepto_parse_uint8( &po );
+						uint8_t bus_type_cnt = zepto_parse_uint8( &po );
+						main_preinit_device( dev_id, key );
+						uint8_t bus_types[16];
+						zepto_parse_read_block( &po, bus_types, bus_type_cnt );
+						siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_types, bus_type_cnt );
 						break;
 					}
-					case COMMLAYER_RET_OK_ADD_DEVICE:
-					case COMMLAYER_RET_OK_CU_FOR_SLAVE:
+					case COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST:
 					{
-						// send error
+						init_loop_done = true;
 						break;
 					}
-					case COMMLAYER_RET_OK_SLAVE_FOR_CU:
+					case COMMLAYER_FROM_CU_STATUS_ADD_DEVICE:
+					case COMMLAYER_FROM_CU_STATUS_FOR_SLAVE:
+					case COMMLAYER_FROM_CU_STATUS_SYNC_CONFIRMATION:
+					{
+						ZEPTO_DEBUG_PRINTF_2( "Unexpected packet type %d during initialization phase\n", ret_code1 );
+						ZEPTO_DEBUG_ASSERT( 0 );
+						break;
+					}
+					case COMMLAYER_FROM_CU_STATUS_FROM_SLAVE:
 					{
 						// igore
 						break;
@@ -137,6 +155,7 @@ int main_loop()
 						// unexpected ret_code
 						ZEPTO_DEBUG_PRINTF_2( "Unexpected ret_code %d\n", ret_code );
 						ZEPTO_DEBUG_ASSERT( 0 );
+						break;
 					}
 				}
 			}
@@ -159,6 +178,9 @@ int main_loop()
 			}
 		}
 	}
+	while ( !init_loop_done );
+
+	main_postinit_all_devices();
 #endif
 
 	// MAIN LOOP
@@ -302,7 +324,7 @@ wait_for_comm_event:
 				ret_code = HAL_GET_PACKET_BYTES( working_handle.packet_h, &param );
 				if ( ret_code == COMMLAYER_RET_FAILED )
 					return 0;
-				if ( ret_code == COMMLAYER_RET_OK_CU_FOR_SLAVE )
+				if ( ret_code == COMMLAYER_FROM_CU_STATUS_FOR_SLAVE )
 				{
 					zepto_response_to_request(  working_handle.packet_h );
 					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_CU\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
@@ -314,7 +336,7 @@ wait_for_comm_event:
 					goto client_received;
 					break;
 				}
-				else if ( ret_code == COMMLAYER_RET_OK_SLAVE_FOR_CU )
+				else if ( ret_code == COMMLAYER_FROM_CU_STATUS_FROM_SLAVE )
 				{
 					bus_id = param;
 					// regular processing will be done below in the next block

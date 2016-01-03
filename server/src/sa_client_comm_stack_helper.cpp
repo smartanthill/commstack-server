@@ -88,7 +88,7 @@ uint8_t main_add_new_device( uint16_t device_id, uint8_t* key )
 	return MAIN_DEVICES_RET_OK;
 }
 
-uint8_t main_init_device( uint16_t device_id, uint8_t* key )
+uint8_t main_preinit_device( uint16_t device_id, uint8_t* key )
 {
 	for ( unsigned int i=0; i<all_devices.size(); i++ )
 		if ( all_devices[i].device_id == device_id )
@@ -96,15 +96,32 @@ uint8_t main_init_device( uint16_t device_id, uint8_t* key )
 	DEVICE_CONTEXT device;
 	device.device_id = device_id;
 	ZEPTO_MEMCPY( device.AES_ENCRYPTION_KEY, key, 16 );
-	device.MEMORY_HANDLE_SAGDP_LSM_APP = acquire_memory_handle();
+
+/*	device.MEMORY_HANDLE_SAGDP_LSM_APP = acquire_memory_handle();
 	device.MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR = acquire_memory_handle();
 	device.MEMORY_HANDLE_SAGDP_LSM_CTR = acquire_memory_handle();
 	device.MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR = acquire_memory_handle();
 	// TODO: check that all handles were successfully allocated
 	sasp_restore_from_backup( &(device.sasp_data), device.device_id );
 	sagdp_init( &(device.sagdp_context_app) );
-	sagdp_init( &(device.sagdp_context_ctr) );
+	sagdp_init( &(device.sagdp_context_ctr) );*/
 	all_devices.push_back( device );
+	return MAIN_DEVICES_RET_OK;
+}
+
+uint8_t main_postinit_all_devices()
+{
+	for ( unsigned int i=0; i<all_devices.size(); i++ )
+	{
+		DEVICE_CONTEXT& device = all_devices[i];
+		device.MEMORY_HANDLE_SAGDP_LSM_APP = acquire_memory_handle();
+		device.MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR = acquire_memory_handle();
+		device.MEMORY_HANDLE_SAGDP_LSM_CTR = acquire_memory_handle();
+		device.MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR = acquire_memory_handle();
+		sasp_restore_from_backup( &(device.sasp_data), device.device_id );
+		sagdp_init( &(device.sagdp_context_app) );
+		sagdp_init( &(device.sagdp_context_ctr) );
+	}
 	return MAIN_DEVICES_RET_OK;
 }
 

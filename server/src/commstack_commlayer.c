@@ -283,14 +283,16 @@ uint8_t internal_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* b
 		ret = try_get_packet_within_master_loop( buff, sz );
 	}
 	while ( ret == COMMLAYER_RET_PENDING );
+	if ( ret == COMMLAYER_RET_FAILED )
+		return COMMLAYER_FROM_CU_STATUS_FAILED;
+	ZEPTO_DEBUG_ASSERT( ret == COMMLAYER_RET_OK );
 
 	memory_object_response_to_request( mem_h );
 	memory_object_cut_and_make_response( mem_h, 0, sz );
 
-	ZEPTO_DEBUG_ASSERT( packet_src == 38 || packet_src == 40 );
-	if ( packet_src == 40 )
-	{
 #ifdef SA_DEBUG
+	if ( packet_src == COMMLAYER_FROM_CU_STATUS_FROM_SLAVE )
+	{
 	uint16_t i;
 	uint16_t sz = memory_object_get_response_size( mem_h );
 	uint8_t* rsp = memory_object_get_response_ptr( mem_h );
@@ -298,12 +300,10 @@ uint8_t internal_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* b
 	for ( i=0; i<sz; i++ )
 		ZEPTO_DEBUG_PRINTF_2( "%02x ", rsp[i] );
 	ZEPTO_DEBUG_PRINTF_1( "\n" );
-#endif
-		return COMMLAYER_RET_OK_SLAVE_FOR_CU;
 	}
-	if ( packet_src == 38 )
-		return COMMLAYER_RET_OK_CU_FOR_SLAVE;
-	return ret;
+#endif
+
+	return packet_src;
 }
 
 uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
@@ -329,12 +329,16 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 
 uint8_t send_within_master( MEMORY_HANDLE mem_h, uint16_t bus_id, uint8_t destination )
 {
-	ZEPTO_DEBUG_PRINTF_1( "send_within_master() called...\n" );
+	ZEPTO_DEBUG_PRINTF_3( "send_within_master() called: status = %d, sddr = %d...\n", destination, bus_id );
 
 	uint16_t sz = memory_object_get_request_size( mem_h );
 	memory_object_request_to_response( mem_h );
 	ZEPTO_DEBUG_ASSERT( sz == memory_object_get_response_size( mem_h ) );
-	ZEPTO_DEBUG_ASSERT( sz != 0 ); // note: any valid message would have to have at least some bytes for headers, etc, so it cannot be empty
+if ( sz == 0 )
+{
+	sz = sz;
+}
+//	ZEPTO_DEBUG_ASSERT( destination == COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST || sz != 0 ); // note: any valid message would have to have at least some bytes for headers, etc, so it cannot be empty
 	uint8_t* buff = memory_object_prepend( mem_h, 5 );
 	ZEPTO_DEBUG_ASSERT( buff != NULL );
 	buff[0] = (uint8_t)sz;
@@ -436,24 +440,24 @@ uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 	ZEPTO_DEBUG_PRINTF_1( "\n" );
 #endif
 	ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
-	return send_within_master( mem_h, bus_id, COMMLAYER_STATUS_FOR_CU_FROM_SLAVE );
+	return send_within_master( mem_h, bus_id, COMMLAYER_TO_CU_STATUS_FOR_SLAVE );
 }
 
 uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
-	return send_within_master( mem_h, src_id, COMMLAYER_STATUS_FOR_SLAVE );
+	return send_within_master( mem_h, src_id, COMMLAYER_TO_CU_STATUS_FROM_SLAVE );
 }
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
-	return send_within_master( mem_h, src_id, COMMLAYER_STATUS_FOR_CU_SLAVE_ERROR );
+	return send_within_master( mem_h, src_id, COMMLAYER_TO_CU_STATUS_SLAVE_ERROR );
 }
 
 void internal_send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 {
 	static uint16_t packet_id = 0;
 	packet_id++;
-	uint8_t ret_code_send = send_within_master( mem_h, packet_id, COMMLAYER_STATUS_FOR_CU_SYNC_REQUEST );
+	uint8_t ret_code_send = send_within_master( mem_h, packet_id, COMMLAYER_TO_CU_STATUS_SYNC_REQUEST );
 	ZEPTO_DEBUG_ASSERT( ret_code_send == COMMLAYER_RET_OK );
 	sync_status = COMMLAYER_SYNC_STATUS_WAIT_FOR_REPLY;
 	waiting_for wf;
@@ -470,8 +474,8 @@ void internal_send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 		ret_code = internal_wait_for_communication_event( &wf );
 		ZEPTO_DEBUG_ASSERT( ret_code == COMMLAYER_RET_FROM_CENTRAL_UNIT ); // with infinite timeout the third option is connection failure
 		
-		ret_code_get = try_get_message_within_master( tmp_mem_h, &addr );
-		if ( ret_code_get == COMMLAYER_RET_OK_SYNC_CONFIRMATION && addr == packet_id )
+		ret_code_get = internal_try_get_message_within_master( tmp_mem_h, &addr );
+		if ( ret_code_get == COMMLAYER_FROM_CU_STATUS_SYNC_CONFIRMATION && addr == packet_id )
 		{
 			zepto_copy_response_to_response_of_another_handle( tmp_mem_h, mem_h );
 			break;
@@ -490,12 +494,13 @@ void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16
 	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
 	uint16_t sz = memory_object_get_response_size( mem_h );
 	uint8_t* prefix = memory_object_prepend( mem_h, 6 );
-	prefix[0] = REQUEST_WRITE_DATA;
+	prefix[0] = REQUEST_TO_CU_WRITE_DATA;
 	prefix[1] = (uint8_t)deice_id;
 	prefix[2] = (uint8_t)(deice_id>>8);
 	prefix[3] = field_id;
 	prefix[4] = (uint8_t)sz;
 	prefix[5] = (uint8_t)(sz>>8);
+	zepto_response_to_request( mem_h );
 	internal_send_sync_request_to_central_unit( mem_h );
 }
 
@@ -504,12 +509,13 @@ void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_
 	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
 	zepto_parser_free_memory( mem_h );
 	uint8_t* prefix = memory_object_prepend( mem_h, 4 );
-	prefix[0] = REQUEST_READ_DATA;
+	prefix[0] = REQUEST_TO_CU_READ_DATA;
 	prefix[1] = (uint8_t)deice_id;
 	prefix[2] = (uint8_t)(deice_id>>8);
 	prefix[3] = field_id;
+	zepto_response_to_request( mem_h );
 	internal_send_sync_request_to_central_unit( mem_h );
-	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) >= 5 );
+	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) >= 4 );
 
 /*	zepto_response_to_request( mem_h );
 	// packet_structure: | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
@@ -518,6 +524,3 @@ void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_
 	zepto_parser_init( &po, mem_h );
 	zepto_parse_read_block( &po, prefix_out, prefix_out );*/
 }
-
-// from comm.stack: 35: intended for slave; 37: intended for central unit
-//   to comm.stack: 40: received from slave; 38: received from central unit

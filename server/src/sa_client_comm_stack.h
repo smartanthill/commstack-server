@@ -53,6 +53,7 @@ typedef struct _PACKET_ASSOCIATED_DATA
 
 #define MAIN_DEVICES_RET_OK 0
 #define MAIN_DEVICES_RET_ALREADY_EXISTS 1
+#define MAIN_DEVICES_RET_DOES_NOT_EXIST 2
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,6 +65,7 @@ DEVICE_CONTEXT* main_get_device_data_by_index( unsigned int idx );
 uint8_t main_add_new_device( uint16_t device_id, uint8_t* key );
 uint8_t main_preinit_device( uint16_t device_id, uint8_t* key );
 uint8_t main_postinit_all_devices();
+uint8_t main_postinit_device( uint16_t device_id );
 uint8_t main_remove_device( uint16_t device_id );
 
 #ifdef __cplusplus

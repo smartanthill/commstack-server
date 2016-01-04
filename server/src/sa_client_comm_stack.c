@@ -91,7 +91,6 @@ int main_loop()
 	uint16_t target_device_id;
 	bool for_ctr = 0;
 
-#if 1
 	// INITIALIZING LOOP
 	bool init_loop_done = false;
 	do
@@ -139,7 +138,7 @@ int main_loop()
 					}
 					case COMMLAYER_FROM_CU_STATUS_ADD_DEVICE:
 					case COMMLAYER_FROM_CU_STATUS_FOR_SLAVE:
-					case COMMLAYER_FROM_CU_STATUS_SYNC_CONFIRMATION:
+					case COMMLAYER_FROM_CU_STATUS_SYNC_RESPONSE:
 					{
 						ZEPTO_DEBUG_PRINTF_2( "Unexpected packet type %d during initialization phase\n", ret_code1 );
 						ZEPTO_DEBUG_ASSERT( 0 );
@@ -181,7 +180,6 @@ int main_loop()
 	while ( !init_loop_done );
 
 	main_postinit_all_devices();
-#endif
 
 	// MAIN LOOP
 	for (;;)
@@ -344,6 +342,52 @@ wait_for_comm_event:
 					zepto_response_to_request(  working_handle.packet_h );
 					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_SLAVE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
 					goto siotmp_rec;
+					break;
+				}
+				else if ( ret_code == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE )
+				{
+					// | device_id (2 bytes, low, high) | key (16 bytes) | is_retransmitter (1 byte) | bus_type_count (1 byte) | bus_type_list (variable size) |
+					zepto_response_to_request(  working_handle.packet_h );
+					ZEPTO_DEBUG_PRINTF_3( "\'packet_status == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					parser_obj po;
+					zepto_parser_init( &po, working_handle.packet_h );
+					ZEPTO_DEBUG_ASSERT( zepto_parsing_remaining_bytes( &po ) >= 20 );
+					uint8_t tmp = zepto_parse_uint8( &po );
+					uint16_t dev_id = zepto_parse_uint8( &po );
+					dev_id <<= 8;
+					dev_id += tmp;
+					uint8_t key[16];
+					zepto_parse_read_block( &po, key, 16 );
+					uint8_t is_retransmitter = zepto_parse_uint8( &po );
+					uint8_t bus_type_cnt = zepto_parse_uint8( &po );
+					ZEPTO_DEBUG_PRINTF_4( "\'ret_code == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': dev_id = %d, is_retransmitter = %d, bus_type_cnt = %d\n", dev_id, is_retransmitter, bus_type_cnt );
+					uint8_t ret1 = main_preinit_device( dev_id, key );
+					ZEPTO_DEBUG_ASSERT( ret1 == MAIN_DEVICES_RET_OK ); // TODO: think about error handling/reporting
+					ret1 = main_postinit_device( dev_id );
+					ZEPTO_DEBUG_ASSERT( ret1 == MAIN_DEVICES_RET_OK );
+					uint8_t bus_types[16];
+					zepto_parse_read_block( &po, bus_types, bus_type_cnt );
+					siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_types, bus_type_cnt );
+					goto wait_for_comm_event;
+					break;
+				}
+				else if ( ret_code == COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE )
+				{
+					// | device_id (2 bytes, low, high) |
+					zepto_response_to_request(  working_handle.packet_h );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_SLAVE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					parser_obj po;
+					zepto_parser_init( &po, working_handle.packet_h );
+					ZEPTO_DEBUG_ASSERT( zepto_parsing_remaining_bytes( &po ) == 2 );
+					uint8_t tmp = zepto_parse_uint8( &po );
+					uint16_t dev_id = zepto_parse_uint8( &po );
+					dev_id <<= 8;
+					dev_id += tmp;
+					uint8_t ret1 = main_remove_device( dev_id );
+					ZEPTO_DEBUG_ASSERT( ret1 == MAIN_DEVICES_RET_OK ); // TODO: think about error handling/reporting
+					ret1 = siot_mesh_at_root_remove_device( dev_id );
+					ZEPTO_DEBUG_ASSERT( ret1 == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: think about error handling/reporting
+					goto wait_for_comm_event;
 					break;
 				}
 				else

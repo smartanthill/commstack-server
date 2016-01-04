@@ -109,6 +109,24 @@ uint8_t main_preinit_device( uint16_t device_id, uint8_t* key )
 	return MAIN_DEVICES_RET_OK;
 }
 
+uint8_t main_postinit_device( uint16_t device_id )
+{
+	for ( unsigned int i=0; i<all_devices.size(); i++ )
+		if ( all_devices[i].device_id == device_id )
+		{
+			DEVICE_CONTEXT& device = all_devices[i];
+			device.MEMORY_HANDLE_SAGDP_LSM_APP = acquire_memory_handle();
+			device.MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR = acquire_memory_handle();
+			device.MEMORY_HANDLE_SAGDP_LSM_CTR = acquire_memory_handle();
+			device.MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR = acquire_memory_handle();
+			sasp_restore_from_backup( &(device.sasp_data), device.device_id );
+			sagdp_init( &(device.sagdp_context_app) );
+			sagdp_init( &(device.sagdp_context_ctr) );
+			return MAIN_DEVICES_RET_OK;
+		}
+	return MAIN_DEVICES_RET_DOES_NOT_EXIST;
+}
+
 uint8_t main_postinit_all_devices()
 {
 	for ( unsigned int i=0; i<all_devices.size(); i++ )

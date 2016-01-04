@@ -475,7 +475,7 @@ void internal_send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 		ZEPTO_DEBUG_ASSERT( ret_code == COMMLAYER_RET_FROM_CENTRAL_UNIT ); // with infinite timeout the third option is connection failure
 		
 		ret_code_get = internal_try_get_message_within_master( tmp_mem_h, &addr );
-		if ( ret_code_get == COMMLAYER_FROM_CU_STATUS_SYNC_CONFIRMATION && addr == packet_id )
+		if ( ret_code_get == COMMLAYER_FROM_CU_STATUS_SYNC_RESPONSE && addr == packet_id )
 		{
 			zepto_copy_response_to_response_of_another_handle( tmp_mem_h, mem_h );
 			break;
@@ -502,11 +502,12 @@ void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16
 	prefix[5] = (uint8_t)(sz>>8);
 	zepto_response_to_request( mem_h );
 	internal_send_sync_request_to_central_unit( mem_h );
+	// TODO: check response
 }
 
 void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id )
 {
-	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) |
 	zepto_parser_free_memory( mem_h );
 	uint8_t* prefix = memory_object_prepend( mem_h, 4 );
 	prefix[0] = REQUEST_TO_CU_READ_DATA;
@@ -515,12 +516,21 @@ void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_
 	prefix[3] = field_id;
 	zepto_response_to_request( mem_h );
 	internal_send_sync_request_to_central_unit( mem_h );
-	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) >= 4 );
+	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) >= 6 );
 
-/*	zepto_response_to_request( mem_h );
-	// packet_structure: | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
-	uint8_t prefix_out[5];
-	parser_obj po;
+	zepto_response_to_request( mem_h );
+	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+	uint8_t prefix_out[6];
+	parser_obj po, po1;
 	zepto_parser_init( &po, mem_h );
-	zepto_parse_read_block( &po, prefix_out, prefix_out );*/
+	zepto_parse_read_block( &po, prefix_out, 6 );
+	uint16_t declared_data_sz = prefix_out[5];
+	declared_data_sz <<= 8;
+	declared_data_sz += prefix_out[4];
+	// TODO: check response
+	zepto_parser_init_by_parser( &po1, &po );
+	uint16_t actual_data_sz = zepto_parsing_remaining_bytes( &po );
+	ZEPTO_DEBUG_ASSERT( declared_data_sz == actual_data_sz ); // TODO: think about error handling/reporting instead
+	zepto_parse_skip_block( &po1, actual_data_sz );
+	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
 }

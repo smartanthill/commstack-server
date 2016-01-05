@@ -1731,9 +1731,11 @@ void siot_mesh_at_root_update_to_packet( MEMORY_HANDLE mem_h, SIOT_MESH_ALL_ROUT
 	uint16_t more;
 //	ZEPTO_DEBUG_ASSERT( update->in_progress );
 
+#if 0
 	// TEMPORARY CODE: add ccp staff
 	zepto_write_uint8( mem_h, 0x5 ); // first, control
 	zepto_write_uint8( mem_h, 0x5 ); // SACCP_PHY_AND_ROUTING_DATA
+#endif // 0
 
 	// FLAGS: Encoded uint16; bit[0]: DISCARD-RT-FIRST, bit[1]: UPDATE-MAX-TTL flag, bit[2]: UPDATE-FORWARD-TO-SANTA-DELAY flag, bit[3]: UPDATE-MAX-NODE-RANDOM-DELAY flag, bits[4..]: reserved (MUST be zeros)
 	uint16_t flags = update->clear_tables_first ? 1 : 0;

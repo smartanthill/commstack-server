@@ -25,6 +25,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <simpleiot/siot_s_protocol.h>
 #include <simpleiot/siot_gd_protocol.h>
 #include <simpleiot/siot_m_protocol.h>
+#include <simpleiot/siot_cc_protocol_constants.h>
 #include <stdio.h>
 #include "debugging.h"
 
@@ -54,6 +55,7 @@ typedef struct _PACKET_ASSOCIATED_DATA
 #define MAIN_DEVICES_RET_OK 0
 #define MAIN_DEVICES_RET_ALREADY_EXISTS 1
 #define MAIN_DEVICES_RET_DOES_NOT_EXIST 2
+#define MAIN_DEVICES_RET_NO_MORE_EXISTS 3
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,6 +69,8 @@ uint8_t main_preinit_device( uint16_t device_id, uint8_t* key );
 uint8_t main_postinit_all_devices();
 uint8_t main_postinit_device( uint16_t device_id );
 uint8_t main_remove_device( uint16_t device_id );
+void main_add_scheduled_gdp_ctr_request( MEMORY_HANDLE mem_h, uint16_t device_id );
+DEVICE_CONTEXT* main_get_scheduled_gdp_ctr_request( MEMORY_HANDLE mem_h );
 
 #ifdef __cplusplus
 }

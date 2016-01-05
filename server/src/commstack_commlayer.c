@@ -472,6 +472,11 @@ uint8_t send_device_remove_completion_to_central_unit( MEMORY_HANDLE mem_h, uint
 	return send_within_master( mem_h, packet_id, COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED );
 }
 
+uint8_t send_stats_to_central_unit( MEMORY_HANDLE mem_h, uint16_t device_id )
+{
+	return send_within_master( mem_h, device_id, COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED );
+}
+
 void internal_send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 {
 	static uint16_t packet_id = 0;

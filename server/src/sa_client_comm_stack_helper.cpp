@@ -160,3 +160,55 @@ uint8_t main_remove_device( uint16_t device_id )
 	return MAIN_DEVICES_RET_ALREADY_EXISTS;
 }
 
+//////////////////////////////////////////   scheduled gdp-ctr requests
+
+typedef struct _SCHEDULED_GDP_CTR_REQUEST
+{
+	MEMORY_HANDLE mem_h;
+	uint16_t device_id;
+} SCHEDULED_GDP_CTR_REQUEST;
+
+
+typedef list<SCHEDULED_GDP_CTR_REQUEST> SCHEDULED_GDP_CTR_REQUESTS;
+typedef list<SCHEDULED_GDP_CTR_REQUEST>::iterator SCHEDULED_GDP_CTR_REQUESTS_ITERATOR;
+SCHEDULED_GDP_CTR_REQUESTS scheduled_gdp_ctr_request;
+
+
+void main_add_scheduled_gdp_ctr_request( MEMORY_HANDLE mem_h, uint16_t device_id )
+{
+	SCHEDULED_GDP_CTR_REQUEST request;
+	request.device_id = device_id;
+	request.mem_h = acquire_memory_handle();
+	ZEPTO_DEBUG_ASSERT( request.mem_h != MEMORY_HANDLE_INVALID );
+	zepto_copy_request_to_response_of_another_handle( mem_h, request.mem_h );
+	zepto_response_to_request( request.mem_h );
+	scheduled_gdp_ctr_request.push_back( request );
+	zepto_parser_free_memory( mem_h );
+}
+
+DEVICE_CONTEXT* main_get_scheduled_gdp_ctr_request( MEMORY_HANDLE mem_h )
+{
+	SCHEDULED_GDP_CTR_REQUESTS_ITERATOR it;
+	for ( it=scheduled_gdp_ctr_request.begin(); it!=scheduled_gdp_ctr_request.end(); ++it )
+	{
+		DEVICE_CONTEXT* device = main_get_device_data_by_device_id( it->device_id );
+		if ( device != NULL )
+		{
+			if ( sagdp_is_idle( &(device->sagdp_context_ctr ) ) )
+			{
+				zepto_parser_free_memory( mem_h );
+				zepto_copy_request_to_response_of_another_handle( it->mem_h, mem_h );
+				release_memory_handle( it->mem_h );
+				scheduled_gdp_ctr_request.erase( it );
+				return &(*device);
+			}
+		}
+		else
+		{
+			release_memory_handle( it->mem_h );
+			scheduled_gdp_ctr_request.erase( it );
+			break;
+		}
+	}
+	return NULL;
+}

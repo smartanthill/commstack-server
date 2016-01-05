@@ -140,6 +140,8 @@ int main_loop()
 					case COMMLAYER_FROM_CU_STATUS_ADD_DEVICE:
 					case COMMLAYER_FROM_CU_STATUS_FOR_SLAVE:
 					case COMMLAYER_FROM_CU_STATUS_SYNC_RESPONSE:
+					case COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE:
+					case COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST:
 					{
 						ZEPTO_DEBUG_PRINTF_2( "Unexpected packet type %d during initialization phase\n", ret_code1 );
 						ZEPTO_DEBUG_ASSERT( 0 );
@@ -187,6 +189,52 @@ int main_loop()
 	for (;;)
 	{
 wait_for_comm_event:
+		// send whatever waits for sending in ctr mode
+		for(;;)
+		{
+			device = main_get_scheduled_gdp_ctr_request( working_handle.packet_h );
+			if ( device == NULL )
+				break;
+
+			for_ctr = 1;
+			ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
+			if ( ret_code == SAGDP_RET_NEED_NONCE )
+			{
+				ret_code = handler_sasp_get_packet_id( nonce, &(device->sasp_data), device->device_id );
+				ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
+				ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
+				ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
+			}
+			zepto_response_to_request(  working_handle.packet_h );
+			ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		
+			switch ( ret_code )
+			{
+				case SAGDP_RET_SYS_CORRUPTED:
+				{
+					// TODO: think about proper error processsing
+//						send_error_to_central_unit(  working_handle.packet_h );
+					sagdp_init( &(device->sagdp_context_ctr) );
+					ZEPTO_DEBUG_PRINTF_1( "Internal error. System is to be reinitialized\n" );
+					goto wait_for_comm_event;
+					break;
+				}
+				case SAGDP_RET_TO_LOWER_NEW:
+				{
+					// regular processing will be done below in the next block
+					goto saspsend;
+					break;
+				}
+				default:
+				{
+					// unexpected ret_code
+					ZEPTO_DEBUG_PRINTF_2( "Unexpected ret_code %d\n", ret_code );
+					ZEPTO_DEBUG_ASSERT( 0 );
+					break;
+				}
+			}
+		}
+
 		// [[QUICK CHECK FOR UNITS POTENTIALLY WAITING FOR TIMEOUT start]]
 		// we ask each potential unit; if it reports activity, let it continue; otherwise, ask a next one
 		// IMPORTANT: once an order of units is selected and tested, do not change it without extreme necessity
@@ -242,55 +290,68 @@ wait_for_comm_event:
 			}
 			case SIOT_MESH_RET_PASS_TO_CCP:
 			{
-//				ZEPTO_DEBUG_ASSERT( dev_in_use > 0 );
-//				dev_in_use = target_device_id - 1;
 				device = main_get_device_data_by_device_id( target_device_id );
 				ZEPTO_DEBUG_ASSERT( device != NULL );
-
 
 				// quite dirty and temporary solution
 				zepto_response_to_request( working_handle.packet_h );
 				ZEPTO_DEBUG_PRINTF_1( "         ############  about to jump to sagdp with route update reply  ###########\n" );
-//				goto sagdpsend;
 				zepto_parser_free_memory( working_handle.addr_h );
-//				sa_get_time( &currt );
-				for_ctr = 1;
-				ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
-				if ( ret_code == SAGDP_RET_NEED_NONCE )
 				{
-					ret_code = handler_sasp_get_packet_id( nonce, &(device->sasp_data), device->device_id );
-					ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
-//					sa_get_time( &(currt) );
-					ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
-					ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
+					// QUICK AND DIRTY: ADD CCP staff
+					parser_obj po_start, po_end;
+					zepto_parser_init( &po_start, working_handle.packet_h );
+					zepto_parser_init( &po_end, working_handle.packet_h );
+					zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
+					zepto_convert_part_of_request_to_response( working_handle.packet_h, &po_start, &po_end );
+					zepto_write_prepend_byte( working_handle.packet_h, SACCP_PHY_AND_ROUTING_DATA ); // SACCP_PHY_AND_ROUTING_DATA
+					zepto_write_prepend_byte( working_handle.packet_h, 0x5 ); // first, control
+					zepto_response_to_request( working_handle.packet_h );
 				}
-				zepto_response_to_request(  working_handle.packet_h );
-				ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
-		
-				switch ( ret_code )
+
+				if ( sagdp_is_idle( &(device->sagdp_context_ctr) ) )
 				{
-					case SAGDP_RET_SYS_CORRUPTED:
+					for_ctr = 1;
+					ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
+					if ( ret_code == SAGDP_RET_NEED_NONCE )
 					{
-						// TODO: think about proper error processsing
-//						send_error_to_central_unit(  working_handle.packet_h );
-						sagdp_init( &(device->sagdp_context_ctr) );
-						ZEPTO_DEBUG_PRINTF_1( "Internal error. System is to be reinitialized\n" );
-						goto wait_for_comm_event;
-						break;
+						ret_code = handler_sasp_get_packet_id( nonce, &(device->sasp_data), device->device_id );
+						ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
+						ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
+						ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 					}
-					case SAGDP_RET_TO_LOWER_NEW:
+					zepto_response_to_request(  working_handle.packet_h );
+					ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		
+					switch ( ret_code )
 					{
-						// regular processing will be done below in the next block
-						goto saspsend;
-						break;
+						case SAGDP_RET_SYS_CORRUPTED:
+						{
+							// TODO: think about proper error processsing
+	//						send_error_to_central_unit(  working_handle.packet_h );
+							sagdp_init( &(device->sagdp_context_ctr) );
+							ZEPTO_DEBUG_PRINTF_1( "Internal error. System is to be reinitialized\n" );
+							goto wait_for_comm_event;
+							break;
+						}
+						case SAGDP_RET_TO_LOWER_NEW:
+						{
+							// regular processing will be done below in the next block
+							goto saspsend;
+							break;
+						}
+						default:
+						{
+							// unexpected ret_code
+							ZEPTO_DEBUG_PRINTF_2( "Unexpected ret_code %d\n", ret_code );
+							ZEPTO_DEBUG_ASSERT( 0 );
+							break;
+						}
 					}
-					default:
-					{
-						// unexpected ret_code
-						ZEPTO_DEBUG_PRINTF_2( "Unexpected ret_code %d\n", ret_code );
-						ZEPTO_DEBUG_ASSERT( 0 );
-						break;
-					}
+				}
+				else
+				{
+					main_add_scheduled_gdp_ctr_request( working_handle.packet_h, device->device_id );
 				}
 				break;
 			}
@@ -381,7 +442,7 @@ wait_for_comm_event:
 				{
 					// | device_id (2 bytes, low, high) |
 					zepto_response_to_request(  working_handle.packet_h );
-					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_SLAVE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
 					parser_obj po;
 					zepto_parser_init( &po, working_handle.packet_h );
 					ZEPTO_DEBUG_ASSERT( zepto_parsing_remaining_bytes( &po ) == 2 );
@@ -397,6 +458,77 @@ wait_for_comm_event:
 					zepto_write_uint8( working_handle.packet_h, (uint8_t)(dev_id>>8) );
 					zepto_response_to_request( working_handle.packet_h );
 					send_device_remove_completion_to_central_unit( working_handle.packet_h, param );
+					goto wait_for_comm_event;
+					break;
+				}
+				else if ( ret_code == COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST )
+				{
+					zepto_response_to_request(  working_handle.packet_h );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					DEVICE_CONTEXT* device = main_get_device_data_by_device_id( param );
+					if ( device != NULL )
+					{
+						zepto_response_to_request( working_handle.packet_h );
+						ZEPTO_DEBUG_PRINTF_1( "         ############  about to jump to sagdp with get stats request  ###########\n" );
+						zepto_parser_free_memory( working_handle.addr_h );
+						{
+							// QUICK AND DIRTY: ADD CCP staff
+							parser_obj po_start, po_end;
+							zepto_parser_init( &po_start, working_handle.packet_h );
+							zepto_parser_init( &po_end, working_handle.packet_h );
+							zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
+							zepto_convert_part_of_request_to_response( working_handle.packet_h, &po_start, &po_end );
+							zepto_write_prepend_byte( working_handle.packet_h, SACCP_STATS_REQUEST ); // SACCP_PHY_AND_ROUTING_DATA
+							zepto_write_prepend_byte( working_handle.packet_h, 0x5 ); // first, control
+							zepto_response_to_request( working_handle.packet_h );
+						}
+
+						// is gdp-ctr at idle state? - send now or schedule for a later time
+						if ( sagdp_is_idle( &(device->sagdp_context_ctr) ) )
+						{
+							for_ctr = 1;
+							ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
+							if ( ret_code == SAGDP_RET_NEED_NONCE )
+							{
+								ret_code = handler_sasp_get_packet_id( nonce, &(device->sasp_data), device->device_id );
+								ZEPTO_DEBUG_ASSERT( ret_code == SASP_RET_NONCE );
+								ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, nonce, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
+								ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
+							}
+							zepto_response_to_request(  working_handle.packet_h );
+							ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		
+							switch ( ret_code )
+							{
+								case SAGDP_RET_SYS_CORRUPTED:
+								{
+									// TODO: think about proper error processsing
+			//						send_error_to_central_unit(  working_handle.packet_h );
+									sagdp_init( &(device->sagdp_context_ctr) );
+									ZEPTO_DEBUG_PRINTF_1( "Internal error. System is to be reinitialized\n" );
+									goto wait_for_comm_event;
+									break;
+								}
+								case SAGDP_RET_TO_LOWER_NEW:
+								{
+									// regular processing will be done below in the next block
+									goto saspsend;
+									break;
+								}
+								default:
+								{
+									// unexpected ret_code
+									ZEPTO_DEBUG_PRINTF_2( "Unexpected ret_code %d\n", ret_code );
+									ZEPTO_DEBUG_ASSERT( 0 );
+									break;
+								}
+							}
+						}
+						else
+						{
+							main_add_scheduled_gdp_ctr_request( working_handle.packet_h, param );
+						}
+					}
 					goto wait_for_comm_event;
 					break;
 				}
@@ -608,7 +740,7 @@ siotmp_rec:
 					uint16_t packet_head = zepto_parse_encoded_uint16( &po );
 					uint8_t packet_type = packet_head & 0x7; // TODO: use bit field processing instead
 
-					if ( packet_type == 0x5 /*SACCP_PHY_AND_ROUTING_DATA*/ )
+					if ( packet_type == SACCP_PHY_AND_ROUTING_DATA /*SACCP_PHY_AND_ROUTING_DATA*/ )
 					{
 						uint8_t additional_bits = (packet_head >> 3) & 0x7; // "additional bits" passed alongside with PHY-AND-ROUTING-DATA-REQUEST-BODY
 						ZEPTO_DEBUG_ASSERT( additional_bits == 0 ); // Route-Update-Request is always accompanied with SACCP "additional bits" equal to 0x0; bits [6..7] reserved (MUST be zeros)
@@ -619,6 +751,17 @@ siotmp_rec:
 						uint16_t source_dev_id = device->device_id; // TODO: here we know in context of which device we actually work; use actual data!!! 
 				ZEPTO_DEBUG_PRINTF_2( "         ############  route update reply received from dev %d  ###########\n", source_dev_id );
 						handler_siot_mesh_process_route_update_response( source_dev_id,  working_handle.packet_h );
+						goto wait_for_comm_event;
+						break;
+					}
+					else if ( packet_type == SACCP_STATS_RESPONSE )
+					{
+						parser_obj po1;
+						zepto_parser_init_by_parser( &po1, &po );
+						zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+						zepto_convert_part_of_request_to_response( working_handle.packet_h, &po, &po1 );
+						send_stats_to_central_unit( working_handle.packet_h, device->device_id );
+						zepto_parser_free_memory( working_handle.packet_h );
 						goto wait_for_comm_event;
 						break;
 					}

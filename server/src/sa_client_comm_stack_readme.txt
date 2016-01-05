@@ -15,6 +15,8 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
+v0.0a
+
 This file contains PRELIMINARY notes on packet exchange with CommStackServer
 
 NOTE: it is assumed and implemented in a way that CommStackServer has no own means for communication with devices and rather processes packets received externally for/from respective devices.
@@ -35,7 +37,7 @@ II. Packet exchange
 In present implementation CommStackServer resides in a separate process and communication with it is done in a form of TCP packet exchange.
 Each packet has a prefix and payload that depends on a nature of a packet: | prefix | payload |
 Prefix has the following structure: | size (2 bytes, low, high) | address (2 bytes, low, high) | type (1 byte) | 
-where 'size' is a size of payload in bytes, and meaning of 'address' depends on a value of 'type' (willl be discussed below in more details).
+where 'size' is a size of payload in bytes, and meaning of 'address' depends on a value of 'type' (will be discussed below in more details).
 Numerical values of types are TBD.
 
 There are two phases of such communication: initialization and further packet exchange
@@ -98,6 +100,16 @@ To remove a device a packet of type COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE is se
 Currently a packet of type COMMLAYER_TO_CU_STATUS_SLAVE_ERROR is used to let the Client know that packet exchange chain with a device is broken for any reason. 
 In this case the Client is supposed to start a new chain.
 Packet with this status has its 'address' field filled with a device_id of a failed device; and its payload is case-specific.
+
+6. Requesting device stats
+
+Client can send a packet of type COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST to request values of performance counters. 
+In current implementation this packet has no payload, and its 'address' is equal to ID of the device to get counters from.
+This request should be treated as asynchronous.
+ 
+In response to COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST CommStackServer sends a packet of type COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REPLY.
+Its 'address' is set to the ID of the device, and its payload depends on firmware of the device (CommStackServer just forwards the data).
+Note: getting response to COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST may take substantial time (depends on quality of connection on the way to the device of interest)
 
 -------
 TBC...

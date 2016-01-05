@@ -52,6 +52,9 @@ Copyright (C) 2015 OLogN Technologies AG
 #define COMMLAYER_TO_CU_STATUS_FROM_SLAVE 35
 #define COMMLAYER_TO_CU_STATUS_SLAVE_ERROR 47
 #define COMMLAYER_TO_CU_STATUS_SYNC_REQUEST 56
+#define COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE 60
+#define COMMLAYER_TO_CU_STATUS_DEVICE_ADDED 61
+#define COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED 62
 
 // REQUEST/REPLY CODES
 #define REQUEST_TO_CU_WRITE_DATA 0
@@ -73,6 +76,10 @@ uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id );
 uint8_t wait_for_communication_event( waiting_for* wf );
 uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id );
 uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
+
+uint8_t send_device_initialization_completion_to_central_unit( uint16_t packet_id );
+uint8_t send_device_add_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id );
+uint8_t send_device_remove_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id );
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
 void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id );

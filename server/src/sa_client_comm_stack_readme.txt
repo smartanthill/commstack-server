@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-v0.0a
+v0.0b
 
 This file contains PRELIMINARY notes on packet exchange with CommStackServer
 
@@ -55,6 +55,10 @@ Payload of each COMMLAYER_FROM_CU_STATUS_INITIALIZER packet is field 0 for a par
 
 Untill initialization is done packets no other types should be sent to CommStackServer.
 
+When initialization is done CommStackServer send a packet of type COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE 
+with 'address' set to the value of 'address' of COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet and no payload.
+TODO: consider necessity of COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE packet.
+
 2. Regular packet exchange
 
 2.1. Packets to CommStackServer
@@ -93,7 +97,16 @@ Payload of a request to read data has the following structure:
 After CommStackServer is initialized, new devices can be added or existing devices can be removed.
 
 To add a device a packet of type COMMLAYER_FROM_CU_STATUS_ADD_DEVICE is sent. The value of 'address' is a unique number. Its payload is field 0 for a particular device (see above).
+In response to this request a packet of type COMMLAYER_TO_CU_STATUS_DEVICE_ADDED is sent; its 'address' field is a copy of that field from a respective request,
+and its payload contains ID of the device added: | device_id (2 bytes, low, high ) |
+NOTE: from time COMMLAYER_FROM_CU_STATUS_ADD_DEVICE is received and COMMLAYER_TO_CU_STATUS_DEVICE_ADDED is sent a number of 'synchronous' requests to read or write data can be sent to Client
+TODO: think about error reporting
+
 To remove a device a packet of type COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE is sent. The value of 'address' is a unique number. Its payload is | device_id (2 byets, low, high) | of a device to be removed.
+In response to this request a packet of type COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED is sent; its 'address' field is a copy of that field from a respective request,
+and its payload contains ID of the device removed: | device_id (2 bytes, low, high ) |
+NOTE: from time COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE is received and COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED is sent a number of 'synchronous' requests to read or write data can be sent to Client
+TODO: think about error reporting
 
 5. Error reporting
 

@@ -91,6 +91,8 @@ int main_loop()
 	uint16_t target_device_id;
 	bool for_ctr = 0;
 
+	uint16_t param;
+
 	// INITIALIZING LOOP
 	bool init_loop_done = false;
 	do
@@ -103,7 +105,6 @@ int main_loop()
 			case COMMLAYER_RET_FROM_CENTRAL_UNIT:
 			{
 				// regular processing will be done below in the next block
-				uint16_t param;
 				uint8_t ret_code1 = HAL_GET_PACKET_BYTES( working_handle.packet_h, &param );
 				switch (ret_code1 )
 				{
@@ -178,6 +179,7 @@ int main_loop()
 		}
 	}
 	while ( !init_loop_done );
+	send_device_initialization_completion_to_central_unit( param );
 
 	main_postinit_all_devices();
 
@@ -318,8 +320,8 @@ wait_for_comm_event:
 			case COMMLAYER_RET_FROM_CENTRAL_UNIT:
 			{
 				// regular processing will be done below in the next block
-				uint16_t param;
 				ret_code = HAL_GET_PACKET_BYTES( working_handle.packet_h, &param );
+
 				if ( ret_code == COMMLAYER_RET_FAILED )
 					return 0;
 				if ( ret_code == COMMLAYER_FROM_CU_STATUS_FOR_SLAVE )
@@ -368,6 +370,10 @@ wait_for_comm_event:
 					uint8_t bus_types[16];
 					zepto_parse_read_block( &po, bus_types, bus_type_cnt );
 					siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_types, bus_type_cnt );
+					zepto_write_uint8( working_handle.packet_h, (uint8_t)dev_id );
+					zepto_write_uint8( working_handle.packet_h, (uint8_t)(dev_id>>8) );
+					zepto_response_to_request( working_handle.packet_h );
+					send_device_add_completion_to_central_unit( working_handle.packet_h, param );
 					goto wait_for_comm_event;
 					break;
 				}
@@ -387,6 +393,10 @@ wait_for_comm_event:
 					ZEPTO_DEBUG_ASSERT( ret1 == MAIN_DEVICES_RET_OK ); // TODO: think about error handling/reporting
 					ret1 = siot_mesh_at_root_remove_device( dev_id );
 					ZEPTO_DEBUG_ASSERT( ret1 == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: think about error handling/reporting
+					zepto_write_uint8( working_handle.packet_h, (uint8_t)dev_id );
+					zepto_write_uint8( working_handle.packet_h, (uint8_t)(dev_id>>8) );
+					zepto_response_to_request( working_handle.packet_h );
+					send_device_remove_completion_to_central_unit( working_handle.packet_h, param );
 					goto wait_for_comm_event;
 					break;
 				}

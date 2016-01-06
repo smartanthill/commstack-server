@@ -196,6 +196,8 @@ wait_for_comm_event:
 			if ( device == NULL )
 				break;
 
+			zepto_response_to_request( working_handle.packet_h );
+
 			for_ctr = 1;
 			ret_code = handler_sagdp_receive_hlp( &currt, &wait_for, NULL, working_handle.packet_h, working_handle.addr_h, device->MEMORY_HANDLE_SAGDP_LSM_CTR, device->MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR, &(device->sagdp_context_ctr), &(working_handle.resend_cnt) );
 			if ( ret_code == SAGDP_RET_NEED_NONCE )
@@ -760,6 +762,7 @@ siotmp_rec:
 						zepto_parser_init_by_parser( &po1, &po );
 						zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
 						zepto_convert_part_of_request_to_response( working_handle.packet_h, &po, &po1 );
+						zepto_response_to_request( working_handle.packet_h );
 						send_stats_to_central_unit( working_handle.packet_h, device->device_id );
 						zepto_parser_free_memory( working_handle.packet_h );
 						goto wait_for_comm_event;

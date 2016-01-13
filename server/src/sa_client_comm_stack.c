@@ -564,8 +564,6 @@ siotmp_rec:
 		ret_code = handler_siot_mesh_receive_packet( &currt, &wait_for, working_handle.packet_h, MEMORY_HANDLE_MESH_ACK, &dev_in_use, &bus_id, 0, 0 ); // TODO: add actual connection quality
 //		dev_in_use--;
 //		ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
-		device = main_get_device_data_by_device_id( dev_in_use );
-		ZEPTO_DEBUG_ASSERT( device != NULL );
 		zepto_response_to_request(  working_handle.packet_h );
 		ZEPTO_DEBUG_PRINTF_5( "handler_siot_mesh_receive_packet(): ret: %d; rq_size: %d, rsp_size: %d, dev_in_use = %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ), dev_in_use );
 
@@ -573,6 +571,8 @@ siotmp_rec:
 		{
 			case SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS:
 			{
+				device = main_get_device_data_by_device_id( dev_in_use );
+				ZEPTO_DEBUG_ASSERT( device != NULL );
 				ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
 				zepto_response_to_request( MEMORY_HANDLE_MESH_ACK );
 				HAL_SEND_PACKET_TO_DEVICE( MEMORY_HANDLE_MESH_ACK, bus_id );
@@ -583,10 +583,14 @@ siotmp_rec:
 			case SIOT_MESH_RET_PASS_TO_PROCESS:
 			{
 				// regular processing will be done below in the next block
+				device = main_get_device_data_by_device_id( dev_in_use );
+				ZEPTO_DEBUG_ASSERT( device != NULL );
 				break;
 			}
 			case SIOT_MESH_RET_PASS_TO_SEND:
 			{
+				device = main_get_device_data_by_device_id( dev_in_use );
+				ZEPTO_DEBUG_ASSERT( device != NULL );
 				ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
 				goto hal_send;
 				break;

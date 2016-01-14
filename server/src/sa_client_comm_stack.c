@@ -465,7 +465,7 @@ wait_for_comm_event:
 				{
 					zepto_response_to_request(  working_handle.packet_h );
 					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
-					DEVICE_CONTEXT* device = main_get_device_data_by_device_id( param );
+					device = main_get_device_data_by_device_id( param );
 					if ( device != NULL )
 					{
 						zepto_response_to_request( working_handle.packet_h );

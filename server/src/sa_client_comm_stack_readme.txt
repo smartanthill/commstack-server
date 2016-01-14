@@ -88,9 +88,9 @@ Payload of a request to read data has the following structure:
 
 Payload of replies are structured as follows:
 Payload of a response to a request to write data:
-| command = RESPONSE_FROM_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) |
+| command = RESPONSE_FROM_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) |
 Payload of a request to read data has the following structure:
-| command = RESPONSE_FROM_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+| command = RESPONSE_FROM_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
 
 4. Dynamical device adding/removing
 

@@ -17,6 +17,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "commstack_commlayer.h"
 #include "commstack_commlayer_helper.h"
+#include "debugging.h"
 #include <stdio.h>
 
 #define MAX_PACKET_SIZE 80
@@ -323,7 +324,7 @@ uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
 	}
 	else
 	{
-		return internal_try_get_message_within_master( mem_h, bus_id );
+		return HAL_INTERNAL_GET_PACKET_BYTES( mem_h, bus_id );
 	}
 }
 
@@ -425,7 +426,7 @@ uint8_t wait_for_communication_event( waiting_for* wf )
 {
 	if ( cscl_is_queued_packet() == COMMLAYER_SYNC_STATUS_OK )
 		return COMMLAYER_RET_FROM_CENTRAL_UNIT;
-	return internal_wait_for_communication_event( wf );
+	return HAL_INTERNAL_WAIT_FOR_COMM_EVENT( wf );
 }
 
 uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
@@ -440,48 +441,48 @@ uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 	ZEPTO_DEBUG_PRINTF_1( "\n" );
 #endif
 	ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
-	return send_within_master( mem_h, bus_id, COMMLAYER_TO_CU_STATUS_FOR_SLAVE );
+	return HAL_SEND_WITHIN_MASTER( mem_h, bus_id, COMMLAYER_TO_CU_STATUS_FOR_SLAVE );
 }
 
 uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
-	return send_within_master( mem_h, src_id, COMMLAYER_TO_CU_STATUS_FROM_SLAVE );
+	return HAL_SEND_WITHIN_MASTER( mem_h, src_id, COMMLAYER_TO_CU_STATUS_FROM_SLAVE );
 }
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 {
-	return send_within_master( mem_h, src_id, COMMLAYER_TO_CU_STATUS_SLAVE_ERROR );
+	return HAL_SEND_WITHIN_MASTER( mem_h, src_id, COMMLAYER_TO_CU_STATUS_SLAVE_ERROR );
 }
 
 uint8_t send_device_initialization_completion_to_central_unit( uint16_t initialization_packet_count )
 {
 	MEMORY_HANDLE mem_h = acquire_memory_handle();
 	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
-	uint8_t ret = send_within_master( mem_h, initialization_packet_count, COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE );
+	uint8_t ret = HAL_SEND_WITHIN_MASTER( mem_h, initialization_packet_count, COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE );
 	release_memory_handle( mem_h );
 	return ret;
 }
 
 uint8_t send_device_add_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id )
 {
-	return send_within_master( mem_h, packet_id, COMMLAYER_TO_CU_STATUS_DEVICE_ADDED );
+	return HAL_SEND_WITHIN_MASTER( mem_h, packet_id, COMMLAYER_TO_CU_STATUS_DEVICE_ADDED );
 }
 
 uint8_t send_device_remove_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id )
 {
-	return send_within_master( mem_h, packet_id, COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED );
+	return HAL_SEND_WITHIN_MASTER( mem_h, packet_id, COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED );
 }
 
 uint8_t send_stats_to_central_unit( MEMORY_HANDLE mem_h, uint16_t device_id )
 {
-	return send_within_master( mem_h, device_id, COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REPLY );
+	return HAL_SEND_WITHIN_MASTER( mem_h, device_id, COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REPLY );
 }
 
 void internal_send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 {
 	static uint16_t packet_id = 0;
 	packet_id++;
-	uint8_t ret_code_send = send_within_master( mem_h, packet_id, COMMLAYER_TO_CU_STATUS_SYNC_REQUEST );
+	uint8_t ret_code_send = HAL_SEND_WITHIN_MASTER( mem_h, packet_id, COMMLAYER_TO_CU_STATUS_SYNC_REQUEST );
 	ZEPTO_DEBUG_ASSERT( ret_code_send == COMMLAYER_RET_OK );
 	sync_status = COMMLAYER_SYNC_STATUS_WAIT_FOR_REPLY;
 	waiting_for wf;
@@ -495,10 +496,10 @@ void internal_send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 		wf.wait_packet = 1;
 		wf.wait_time.high_t = 0xFFFF;
 		wf.wait_time.low_t = 0xFFFF;
-		ret_code = internal_wait_for_communication_event( &wf );
+		ret_code = HAL_INTERNAL_WAIT_FOR_COMM_EVENT( &wf );
 		ZEPTO_DEBUG_ASSERT( ret_code == COMMLAYER_RET_FROM_CENTRAL_UNIT ); // with infinite timeout the third option is connection failure
 		
-		ret_code_get = internal_try_get_message_within_master( tmp_mem_h, &addr );
+		ret_code_get = HAL_INTERNAL_GET_PACKET_BYTES( tmp_mem_h, &addr );
 		if ( ret_code_get == COMMLAYER_FROM_CU_STATUS_SYNC_RESPONSE && addr == packet_id )
 		{
 			zepto_copy_response_to_response_of_another_handle( tmp_mem_h, mem_h );

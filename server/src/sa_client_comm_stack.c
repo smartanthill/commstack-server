@@ -75,12 +75,6 @@ int main_loop()
 	uint16_t dev_in_use;
 	DEVICE_CONTEXT* device;
 	// do necessary initialization
-/*	for ( dev_in_use=0; dev_in_use<MAX_INSTANCES_SUPPORTED; dev_in_use++ )
-	{
-		sasp_restore_from_backup( &(device->sasp_data), device->device_id );
-		sagdp_init( &(device->sagdp_context_app) );
-		sagdp_init( &(device->sagdp_context_ctr) );
-	}*/
 		
 
 	HAL_GET_TIME( &(currt), TIME_REQUEST_POINT__INIT );
@@ -97,7 +91,8 @@ int main_loop()
 	bool init_loop_done = false;
 	do
 	{
-		ret_code = HAL_WAIT_FOR_COMM_EVENT( &wait_for );
+//		ret_code = HAL_WAIT_FOR_COMM_EVENT( &wait_for );
+		ret_code = wait_for_communication_event( &wait_for );
 		SA_TIME_SET_INFINITE_TIME( wait_for.wait_time );
 
 		switch ( ret_code )
@@ -105,7 +100,8 @@ int main_loop()
 			case COMMLAYER_RET_FROM_CENTRAL_UNIT:
 			{
 				// regular processing will be done below in the next block
-				uint8_t ret_code1 = HAL_GET_PACKET_BYTES( working_handle.packet_h, &param );
+//				uint8_t ret_code1 = HAL_GET_PACKET_BYTES( working_handle.packet_h, &param );
+				uint8_t ret_code1 = try_get_message_within_master( working_handle.packet_h, &param );
 				switch (ret_code1 )
 				{
 					case COMMLAYER_RET_FAILED:
@@ -368,7 +364,8 @@ wait_for_comm_event:
 
 		// [[QUICK CHECK FOR UNITS POTENTIALLY WAITING FOR TIMEOUT end]]
 
-		ret_code = HAL_WAIT_FOR_COMM_EVENT( &wait_for );
+//		ret_code = HAL_WAIT_FOR_COMM_EVENT( &wait_for );
+		ret_code = wait_for_communication_event( &wait_for );
 		SA_TIME_SET_INFINITE_TIME( wait_for.wait_time );
 //		ZEPTO_DEBUG_PRINTF_4( "=============================================Msg wait event; ret = %d, rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
 
@@ -383,7 +380,8 @@ wait_for_comm_event:
 			case COMMLAYER_RET_FROM_CENTRAL_UNIT:
 			{
 				// regular processing will be done below in the next block
-				ret_code = HAL_GET_PACKET_BYTES( working_handle.packet_h, &param );
+//				ret_code = HAL_GET_PACKET_BYTES( working_handle.packet_h, &param );
+				ret_code = try_get_message_within_master( working_handle.packet_h, &param );
 
 				if ( ret_code == COMMLAYER_RET_FAILED )
 					return 0;
@@ -575,7 +573,8 @@ siotmp_rec:
 				ZEPTO_DEBUG_ASSERT( device != NULL );
 				ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
 				zepto_response_to_request( MEMORY_HANDLE_MESH_ACK );
-				HAL_SEND_PACKET_TO_DEVICE( MEMORY_HANDLE_MESH_ACK, bus_id );
+//				HAL_SEND_PACKET_TO_DEVICE( MEMORY_HANDLE_MESH_ACK, bus_id );
+				send_message( MEMORY_HANDLE_MESH_ACK, bus_id );
 				zepto_parser_free_memory( MEMORY_HANDLE_MESH_ACK );
 				// regular processing will be done below in the next block
 				break;
@@ -898,7 +897,8 @@ siotmp_rec:
 		// Note: we may need to add some data (such as chain ID) or to somehow restructure the packet data;
 		//       in this case this is a right place to do that
 
-		ret_code = HAL_SEND_PACKET_TO_CU(  working_handle.packet_h, device->device_id );
+//		ret_code = HAL_SEND_PACKET_TO_CU(  working_handle.packet_h, device->device_id );
+		ret_code = send_to_central_unit(  working_handle.packet_h, device->device_id );
 		// TODO: check ret_code
 		goto wait_for_comm_event;
 
@@ -1035,7 +1035,8 @@ saoudp_send:
 hal_send:
 //		ZEPTO_DEBUG_ASSERT( bus_id == 0 ); // TODO: bus_id must be a part of send_packet() call; we are now just in the middle of development...
 		ZEPTO_DEBUG_ASSERT( bus_id != 0xFFFF );
-		ret_code = HAL_SEND_PACKET_TO_DEVICE(  working_handle.packet_h, bus_id );
+//		ret_code = HAL_SEND_PACKET_TO_DEVICE(  working_handle.packet_h, bus_id );
+		ret_code = send_message(  working_handle.packet_h, bus_id );
 		zepto_parser_free_memory(  working_handle.packet_h );
 		if (ret_code != COMMLAYER_RET_OK )
 		{

@@ -95,6 +95,10 @@ uint8_t preanalyze_debug_packet( uint8_t* buff, uint16_t buff_size, uint16_t* pa
 	uint8_t status = buff[3];
 	*packet_data_sz = buff[5];
 	*packet_data_sz = (*packet_data_sz << 8) | buff[4];
+if ( status == 0 )
+{
+	status = status;
+}
 	ZEPTO_DEBUG_ASSERT( status );
 	ZEPTO_DEBUG_ASSERT( *packet_data_sz == buff_size - 6 );
 	ZEPTO_DEBUG_ASSERT( INCOMING_DEBUG_PACKET_HEADER_SIZE == 6 ); // if not, then update it!
@@ -324,7 +328,7 @@ void request_time_val( uint8_t point_id, sa_time_val* tv )
 	tv->high_t = data_in[4];
 	tv->high_t = (tv->high_t<<8) | data_in[3];
 }
-
+/*
 void request_eeprom_state()
 {
 	uint8_t ret;
@@ -346,7 +350,7 @@ void request_eeprom_state()
 	uint8_t* data_in = buff + data_offset;
 	eeprom_deserialize( data_in, packet_data_sz );
 }
-
+*/
 #endif // USE_TIME_MASTER_REGISTER
 
 typedef struct _GETTIME_CALL_POINT { const char* file; uint16_t line;  } GETTIME_CALL_POINT;
@@ -390,6 +394,17 @@ uint8_t debug_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_
 #endif // USE_TIME_MASTER_REGISTER
 }
 
+uint8_t debug_internal_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id )
+{
+#ifdef USE_TIME_MASTER_REGISTER
+	uint8_t ret_code = internal_try_get_message_within_master( mem_h, bus_id );
+	register_incoming_packet_at_comm_stack( mem_h, *bus_id, ret_code );
+	return ret_code;
+#else
+	return request_incoming_packet_at_comm_stack( mem_h, bus_id );
+#endif // USE_TIME_MASTER_REGISTER
+}
+
 uint8_t debug_send_message( MEMORY_HANDLE mem_h, uint16_t bus_id )
 {
 #if !defined USE_TIME_MASTER_REGISTER
@@ -412,6 +427,17 @@ uint8_t debug_send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t device_id )
 #endif // USE_TIME_MASTER_REGISTER
 }
 
+uint8_t debug_send_within_master( MEMORY_HANDLE mem_h, uint16_t bus_id, uint8_t destination )
+{
+#if !defined USE_TIME_MASTER_REGISTER
+	request_outgoing_packet( mem_h, bus_id, destination );
+	return COMMLAYER_RET_OK;
+#else
+	register_outgoing_packet( mem_h, bus_id, destination );
+	return send_within_master( mem_h, bus_id, destination );
+#endif // USE_TIME_MASTER_REGISTER
+}
+
 void  debug_hal_get_time( sa_time_val* tv, uint8_t call_point, const char* file, uint16_t line )
 {
 	check_get_time_call_point( call_point, file, line );
@@ -430,6 +456,17 @@ uint8_t debug_wait_for_communication_event( waiting_for* wf )
 {
 #ifdef USE_TIME_MASTER_REGISTER
 	uint8_t ret_code = wait_for_communication_event( wf );
+	register_wait_request_ret_val( ret_code );
+	return ret_code;
+#else
+	return request_wait_request_ret_val();
+#endif // USE_TIME_MASTER_REGISTER
+}
+
+uint8_t debug_internal_wait_for_communication_event( waiting_for* wf )
+{
+#ifdef USE_TIME_MASTER_REGISTER
+	uint8_t ret_code = internal_wait_for_communication_event( wf );
 	register_wait_request_ret_val( ret_code );
 	return ret_code;
 #else

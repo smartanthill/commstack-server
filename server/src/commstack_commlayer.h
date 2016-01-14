@@ -79,6 +79,10 @@ uint8_t wait_for_communication_event( waiting_for* wf );
 uint8_t try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id );
 uint8_t send_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
 
+uint8_t send_within_master( MEMORY_HANDLE mem_h, uint16_t bus_id, uint8_t destination );
+uint8_t internal_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id );
+uint8_t internal_wait_for_communication_event( waiting_for* wf );
+
 uint8_t send_device_initialization_completion_to_central_unit( uint16_t packet_id );
 uint8_t send_device_add_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id );
 uint8_t send_device_remove_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id );

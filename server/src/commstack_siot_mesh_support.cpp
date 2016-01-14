@@ -631,6 +631,22 @@ void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t
 #define SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
 #define SIOT_MESH_IS_QUALITY_OF_FIRST_INOUT_CONNECTION_BETTER( in1, out1, in2, out2 ) ( (in1<in2)||((in1==in2)&&(out1<out2)) ) /*TODO: this is a quick solution; think about better ones*/
 
+uint8_t siot_mesh_at_root_sanitize_device_id( uint16_t device_id )
+{
+	unsigned int i;
+	for ( i=0; i<mesh_routing_data.size(); i++ )
+		if ( mesh_routing_data[i].device_id == device_id )
+			return SIOT_MESH_AT_ROOT_RET_OK;
+	return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+}
+
+uint8_t siot_mesh_at_root_sanitize_non_root_device_id( uint16_t device_id )
+{
+	if ( device_id == 0 )
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+	return siot_mesh_at_root_sanitize_device_id( device_id );
+}
+
 uint8_t siot_mesh_at_root_find_best_route_to_device( const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next )
 {
 dbg_siot_mesh_at_root_validate_all_device_tables();
@@ -1867,7 +1883,7 @@ ZEPTO_DEBUG_PRINTF_3( "*** ctr--siot_mesh_at_root_update_failed = %d, device_id 
 	return SIOT_MESH_AT_ROOT_RET_FAILED;
 }
 
-void siot_mesh_at_root_remove_link_to_target( uint16_t failed_hop_id, uint8_t update_all_affected )
+uint8_t siot_mesh_at_root_remove_link_to_target( uint16_t failed_hop_id, uint8_t update_all_affected )
 {
 	uint16_t i, j, k, m;
 	uint16_t failed_index = (uint16_t)(-1); 
@@ -1877,6 +1893,10 @@ void siot_mesh_at_root_remove_link_to_target( uint16_t failed_hop_id, uint8_t up
 	vector<int>& prev_list = affected_list1;
 	vector<int>& next_list = affected_list2;
 	SIOT_MESH_DEVICE_ROUTING_DATA_UPDATE_INITIATOR update;
+
+	uint8_t ret = siot_mesh_at_root_sanitize_device_id( failed_hop_id );
+	if ( ret != SIOT_MESH_AT_ROOT_RET_OK )
+		return ret;
 
 	// 1. find index of root data
 	for ( i=0; i<mesh_routing_data.size(); i++)
@@ -2033,9 +2053,10 @@ void siot_mesh_at_root_remove_link_to_target( uint16_t failed_hop_id, uint8_t up
 	}
 
 dbg_siot_mesh_at_root_validate_all_device_tables();
+	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
-void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id, uint16_t failed_target_id, uint8_t from_root )
+uint8_t siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id, uint16_t failed_target_id, uint8_t from_root )
 {
 #ifdef SA_DEBUG
 	dbg_siot_mesh_at_root_validate_all_device_tables();
@@ -2053,10 +2074,11 @@ ZEPTO_DEBUG_PRINTF_6( "*** ctr--siot_mesh_at_root_remove_link_to_target_route_er
 		failed_hop_id = reporting_id;
 	}
 
-	siot_mesh_at_root_remove_link_to_target( failed_hop_id, from_root );
+	uint8_t ret = siot_mesh_at_root_remove_link_to_target( failed_hop_id, from_root );
 #ifdef SA_DEBUG
 	dbg_siot_mesh_at_root_validate_all_device_tables();
 #endif // SA_DEBUG
+	return ret;
 }
 
 bool siot_mesh_at_root_is_route_under_update( uint16_t device_id )

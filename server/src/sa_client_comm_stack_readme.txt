@@ -30,7 +30,7 @@ For each device a record consists of a number of fields with field 0 containing 
 This information is typically generated at time of device programming.
 In addition, with respect to each device, CommStackServer can request to store some number of additional fields of, in general, a variable size.
 Each such field is characterised by its field_id.
-Detaails of implementation of a storage to hold this data is beyond this document and is up to implementer as long as it provides required services.
+Details of implementation of a storage to hold this data is beyond this document and is up to implementer as long as it provides required services.
 
 II. Packet exchange
 
@@ -87,10 +87,10 @@ Payload of a request to read data has the following structure:
 | command = REQUEST_TO_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) |
 
 Payload of replies are structured as follows:
-Payload of a response to a request to write data: 
-| command = RESPONSE_TO_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) |
-Payload of a request to read data has the following structure: 
-| command = RESPONSE_TO_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+Payload of a response to a request to write data:
+| command = RESPONSE_FROM_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) |
+Payload of a request to read data has the following structure:
+| command = RESPONSE_FROM_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
 
 4. Dynamical device adding/removing
 

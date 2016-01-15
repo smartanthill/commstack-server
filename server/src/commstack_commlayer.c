@@ -454,13 +454,9 @@ uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id )
 	return HAL_SEND_WITHIN_MASTER( mem_h, src_id, COMMLAYER_TO_CU_STATUS_SLAVE_ERROR );
 }
 
-uint8_t send_device_initialization_completion_to_central_unit( uint16_t initialization_packet_count )
+uint8_t send_device_initialization_completion_to_central_unit( uint16_t initialization_packet_count, MEMORY_HANDLE mem_h )
 {
-	MEMORY_HANDLE mem_h = acquire_memory_handle();
-	ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
-	uint8_t ret = HAL_SEND_WITHIN_MASTER( mem_h, initialization_packet_count, COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE );
-	release_memory_handle( mem_h );
-	return ret;
+	return HAL_SEND_WITHIN_MASTER( mem_h, initialization_packet_count, COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE );
 }
 
 uint8_t send_device_add_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id )

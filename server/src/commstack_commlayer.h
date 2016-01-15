@@ -65,10 +65,11 @@ Copyright (C) 2015 OLogN Technologies AG
 #define RESPONSE_FROM_CU_READ_DATA 1
 
 // error codes
-#define COMMLAYER_TO_CU_STATUS_DEVICE_ADDED_OK 0
-#define COMMLAYER_TO_CU_STATUS_DEVICE_ADDED_FAILED_EXISTS 1
-#define COMMLAYER_TO_CU_STATUS_DEVICE_ADDED_FAILED_INCOMPLETE_DATA 2
-#define COMMLAYER_TO_CU_STATUS_DEVICE_ADDED_FAILED_UNKNOWN_REASON 3
+#define COMMLAYER_TO_CU_STATUS_OK 0
+#define COMMLAYER_TO_CU_STATUS_FAILED_EXISTS 1
+#define COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA 2
+#define COMMLAYER_TO_CU_STATUS_FAILED_UNKNOWN_REASON 3
+#define COMMLAYER_TO_CU_STATUS_FAILED_UNEXPECTED_PACKET 4
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,7 +90,7 @@ uint8_t send_within_master( MEMORY_HANDLE mem_h, uint16_t bus_id, uint8_t destin
 uint8_t internal_try_get_message_within_master( MEMORY_HANDLE mem_h, uint16_t* bus_id );
 uint8_t internal_wait_for_communication_event( waiting_for* wf );
 
-uint8_t send_device_initialization_completion_to_central_unit( uint16_t packet_id );
+uint8_t send_device_initialization_completion_to_central_unit( uint16_t initialization_packet_count, MEMORY_HANDLE mem_h );
 uint8_t send_device_add_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id );
 uint8_t send_device_remove_completion_to_central_unit( MEMORY_HANDLE mem_h, uint16_t packet_id );
 uint8_t send_stats_to_central_unit( MEMORY_HANDLE mem_h, uint16_t device_id );

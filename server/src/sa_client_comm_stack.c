@@ -424,15 +424,20 @@ wait_for_comm_event:
 					uint8_t is_retransmitter = zepto_parse_uint8( &po );
 					uint8_t bus_type_cnt = zepto_parse_uint8( &po );
 					ZEPTO_DEBUG_PRINTF_4( "\'ret_code == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': dev_id = %d, is_retransmitter = %d, bus_type_cnt = %d\n", dev_id, is_retransmitter, bus_type_cnt );
-					uint8_t ret1 = main_preinit_device( dev_id, key );
-					ZEPTO_DEBUG_ASSERT( ret1 == MAIN_DEVICES_RET_OK ); // TODO: think about error handling/reporting
-					ret1 = main_postinit_device( dev_id );
-					ZEPTO_DEBUG_ASSERT( ret1 == MAIN_DEVICES_RET_OK );
-					uint8_t bus_types[16];
-					zepto_parse_read_block( &po, bus_types, bus_type_cnt );
-					siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_types, bus_type_cnt );
+					uint8_t ret1 = main_add_new_device( dev_id, key );
 					zepto_write_uint8( working_handle.packet_h, (uint8_t)dev_id );
 					zepto_write_uint8( working_handle.packet_h, (uint8_t)(dev_id>>8) );
+					if  ( ret1 == MAIN_DEVICES_RET_OK )
+					{
+						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_DEVICE_ADDED_OK );
+						uint8_t bus_types[16];
+						zepto_parse_read_block( &po, bus_types, bus_type_cnt );
+						siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_types, bus_type_cnt );
+					}
+					else if  ( ret1 == MAIN_DEVICES_RET_ALREADY_EXISTS )
+						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_DEVICE_ADDED_FAILED_EXISTS );
+					else
+						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_DEVICE_ADDED_FAILED_UNKNOWN_REASON );
 					zepto_response_to_request( working_handle.packet_h );
 					send_device_add_completion_to_central_unit( working_handle.packet_h, param );
 					goto wait_for_comm_event;

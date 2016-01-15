@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-v0.0b
+v0.0c
 
 This file contains PRELIMINARY notes on packet exchange with CommStackServer
 
@@ -56,8 +56,12 @@ Payload of each COMMLAYER_FROM_CU_STATUS_INITIALIZER packet is field 0 for a par
 Untill initialization is done packets no other types should be sent to CommStackServer.
 
 When initialization is done CommStackServer send a packet of type COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE 
-with 'address' set to the value of 'address' of COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet and no payload.
-TODO: consider necessity of COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE packet.
+with 'address' set to the value of 'address' of COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet and payload consisting of error code: | error_code (1 byte) |
+wherein error_code is one of
+COMMLAYER_TO_CU_STATUS_OK: operation completed successfully;
+COMMLAYER_TO_CU_STATUS_FAILED_UNEXPECTED_PACKET: operation failed; in this case 'address' will be that of a packet causing error.
+In case of any error during initialization phase CommStackServer process terminates.
+
 
 2. Regular packet exchange
 
@@ -86,10 +90,10 @@ Payload of a request to write data has the following structure:
 Payload of a request to read data has the following structure: 
 | command = REQUEST_TO_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) |
 
-Payload of replies are structured as follows:
+Payloads of responses to respective requests are structured as follows:
 Payload of a response to a request to write data:
 | command = RESPONSE_FROM_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) |
-Payload of a request to read data has the following structure:
+Payload of a response to a request to read data:
 | command = RESPONSE_FROM_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
 
 4. Dynamical device adding/removing
@@ -98,9 +102,14 @@ After CommStackServer is initialized, new devices can be added or existing devic
 
 To add a device a packet of type COMMLAYER_FROM_CU_STATUS_ADD_DEVICE is sent. The value of 'address' is a unique number. Its payload is field 0 for a particular device (see above).
 In response to this request a packet of type COMMLAYER_TO_CU_STATUS_DEVICE_ADDED is sent; its 'address' field is a copy of that field from a respective request,
-and its payload contains ID of the device added: | device_id (2 bytes, low, high ) |
+and its payload contains ID of the device added: | device_id (2 bytes, low, high ) | error_code (1 byte) |
+wherein error_code is one of the following values:
+COMMLAYER_TO_CU_STATUS_OK: operation successfull
+COMMLAYER_TO_CU_STATUS_FAILED_EXISTS: a device with device_id specified in the request is already added (repeated attempt to add?)
+COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA: payload of the request is inconsistent
+COMMLAYER_TO_CU_STATUS_FAILED_UNKNOWN_REASON: any other reason to fail (should never happen)
+
 NOTE: from time COMMLAYER_FROM_CU_STATUS_ADD_DEVICE is received and COMMLAYER_TO_CU_STATUS_DEVICE_ADDED is sent a number of 'synchronous' requests to read or write data can be sent to Client
-TODO: think about error reporting
 
 To remove a device a packet of type COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE is sent. The value of 'address' is a unique number. Its payload is | device_id (2 byets, low, high) | of a device to be removed.
 In response to this request a packet of type COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED is sent; its 'address' field is a copy of that field from a respective request,

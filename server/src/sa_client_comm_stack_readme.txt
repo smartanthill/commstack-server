@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-v0.0c
+v0.0d
 
 This file contains PRELIMINARY notes on packet exchange with CommStackServer
 
@@ -26,7 +26,7 @@ I Data stored externally
 
 All data necessary for CommStackServer to function is stored externally. Currently this data is only specific to devices in the system and thus can be stored on a per-device basis.
 For each device a record consists of a number of fields with field 0 containing basic initialization information:
-| device_id (2 bytes, low, high) | encryption_key (16 bytes) | is_retransmitter (1 byte) | bus_type_size (1 byte) | bus_types (variable size) |
+| device_id (2 bytes, low, high) | encryption_key (16 bytes) | is_retransmitter (1 byte) | bus_id_max (1 byte) | bus_type_count (1 byte) | bus_types (variable size) |
 This information is typically generated at time of device programming.
 In addition, with respect to each device, CommStackServer can request to store some number of additional fields of, in general, a variable size.
 Each such field is characterised by its field_id.

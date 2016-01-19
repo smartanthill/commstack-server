@@ -96,8 +96,8 @@ uint8_t send_device_remove_completion_to_central_unit( MEMORY_HANDLE mem_h, uint
 uint8_t send_stats_to_central_unit( MEMORY_HANDLE mem_h, uint16_t device_id );
 
 uint8_t send_error_to_central_unit( MEMORY_HANDLE mem_h, uint16_t src_id );
-void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id );
-void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id );
+void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16_t deice_id );
+void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_t deice_id );
 
 #ifdef __cplusplus
 }

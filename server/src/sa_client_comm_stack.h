@@ -28,6 +28,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <simpleiot/siot_cc_protocol_constants.h>
 #include <stdio.h>
 #include "debugging.h"
+#include <simpleiot_hal/siot_eeprom.h>
 
 #include <stdlib.h>     /* atoi */
 

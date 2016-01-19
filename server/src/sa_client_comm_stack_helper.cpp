@@ -19,6 +19,7 @@ extern "C" {
 #include "sa_client_comm_stack.h"
 }
 
+
 // items below were defined for various reasons in this projec;
 // STL does not like such redefinitions (see <xkeycheck.h> for details); we do favor for STL
 // If one knows how this could be addressed properly, just do it!
@@ -93,6 +94,7 @@ uint8_t main_preinit_device( uint16_t device_id, uint8_t* key )
 	for ( unsigned int i=0; i<all_devices.size(); i++ )
 		if ( all_devices[i].device_id == device_id )
 			return MAIN_DEVICES_RET_ALREADY_EXISTS;
+	perm_storage_add_device( device_id );
 	DEVICE_CONTEXT device;
 	device.device_id = device_id;
 	ZEPTO_MEMCPY( device.AES_ENCRYPTION_KEY, key, 16 );

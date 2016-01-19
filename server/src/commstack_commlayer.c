@@ -510,7 +510,7 @@ void internal_send_sync_request_to_central_unit( MEMORY_HANDLE mem_h )
 	release_memory_handle( tmp_mem_h );
 }
 
-void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id )
+void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16_t deice_id )
 {
 	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
 	uint16_t sz = memory_object_get_response_size( mem_h );
@@ -518,7 +518,7 @@ void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16
 	prefix[0] = REQUEST_TO_CU_WRITE_DATA;
 	prefix[1] = (uint8_t)deice_id;
 	prefix[2] = (uint8_t)(deice_id>>8);
-	prefix[3] = field_id;
+	prefix[3] = 0;
 	prefix[4] = (uint8_t)sz;
 	prefix[5] = (uint8_t)(sz>>8);
 	zepto_response_to_request( mem_h );
@@ -526,7 +526,7 @@ void send_sync_request_to_central_unit_to_save_data( MEMORY_HANDLE mem_h, uint16
 	// TODO: check response
 }
 
-void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_t deice_id, uint8_t field_id )
+void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_t deice_id )
 {
 	// packet_structure: | command (1 byte) | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) |
 	zepto_parser_free_memory( mem_h );
@@ -534,7 +534,7 @@ void send_sync_request_to_central_unit_to_get_data( MEMORY_HANDLE mem_h, uint16_
 	prefix[0] = REQUEST_TO_CU_READ_DATA;
 	prefix[1] = (uint8_t)deice_id;
 	prefix[2] = (uint8_t)(deice_id>>8);
-	prefix[3] = field_id;
+	prefix[3] = 0;
 	zepto_response_to_request( mem_h );
 	internal_send_sync_request_to_central_unit( mem_h );
 	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) >= 6 );

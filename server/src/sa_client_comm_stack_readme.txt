@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-v0.0d
+v0.0e
 
 This file contains PRELIMINARY notes on packet exchange with CommStackServer
 
@@ -24,12 +24,11 @@ Neither it has own permanent storage means (but rather requests to store or read
 
 I Data stored externally
 
-All data necessary for CommStackServer to function is stored externally. Currently this data is only specific to devices in the system and thus can be stored on a per-device basis.
-For each device a record consists of a number of fields with field 0 containing basic initialization information:
-| device_id (2 bytes, low, high) | encryption_key (16 bytes) | is_retransmitter (1 byte) | bus_id_max (1 byte) | bus_type_count (1 byte) | bus_types (variable size) |
-This information is typically generated at time of device programming.
-In addition, with respect to each device, CommStackServer can request to store some number of additional fields of, in general, a variable size.
-Each such field is characterised by its field_id.
+All data necessary for CommStackServer to function is stored externally. 
+Currently this data is only specific to devices in the system and thus can be stored on a per-device basis.
+There are two types of data: initialization data, and data generated while CommStackServer works.
+The first is supplied during CommStackServer initialization packet exchange (sdee below).
+The second is stored in a single field of a variable size and is available for reading/writing on demand.
 Details of implementation of a storage to hold this data is beyond this document and is up to implementer as long as it provides required services.
 
 II. Packet exchange
@@ -51,7 +50,10 @@ and packet terminating initialization has its
 type = COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST,
 whyle the 'address' starts from 0 and must be incremented with each next packet 
 (thus the value of 'address' in a packet with type = COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST will give a number of previously sent packets with type = COMMLAYER_FROM_CU_STATUS_INITIALIZER).
-Payload of each COMMLAYER_FROM_CU_STATUS_INITIALIZER packet is field 0 for a particular device (see above); COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet has no payload.
+Payload of each COMMLAYER_FROM_CU_STATUS_INITIALIZER packet has the following structure:
+| device_id (2 bytes, low, high) | encryption_key (16 bytes) | is_retransmitter (1 byte) | bus_id_max (1 byte) | bus_type_count (1 byte) | bus_types (variable size) |
+This information is typically generated at time of device programming.
+COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet has no payload.
 
 Untill initialization is done packets no other types should be sent to CommStackServer.
 
@@ -86,15 +88,15 @@ Payload of each packet has a structure | command_type (1 byte) | type_dependent_
 Currently there are two types of 'synchronous' requests: to write and to read data.
 
 Payload of a request to write data has the following structure: 
-| command = REQUEST_TO_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+| command = REQUEST_TO_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | reserved = 0 (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
 Payload of a request to read data has the following structure: 
-| command = REQUEST_TO_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) |
+| command = REQUEST_TO_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | reserved = 0 (1 byte) |
 
 Payloads of responses to respective requests are structured as follows:
 Payload of a response to a request to write data:
-| command = RESPONSE_FROM_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) |
+| command = RESPONSE_FROM_CU_WRITE_DATA | row_id (2 bytes, low, high; usually, device_id) | reserved = 0 (1 byte) | data_sz (2 bytes, low, high) |
 Payload of a response to a request to read data:
-| command = RESPONSE_FROM_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | field_id (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
+| command = RESPONSE_FROM_CU_READ_DATA | row_id (2 bytes, low, high; usually, device_id) | reserved = 0 (1 byte) | data_sz (2 bytes, low, high) | data (variable size) |
 
 4. Dynamical device adding/removing
 

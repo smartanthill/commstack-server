@@ -52,6 +52,7 @@ typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA // used to keep copies of r
 {
 	uint16_t device_id;
 	bool is_retransmitter;
+	uint16_t bus_id_max;
 	uint16_t last_from_santa_request_id;
 #ifdef SIOT_MESH_BTLE_MODE
 	uint16_t last_reconnect_req_id;
@@ -324,6 +325,7 @@ void siot_mesh_at_root_init( sa_time_val* currt )
 	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA data;
 	data.device_id = 0;
 	data.is_retransmitter = false;
+	data.bus_id_max = 1;
 	data.bus_type_list.push_back( 0 );
 	data.from_santa_sequence_started = false;
 	data.last_from_santa_request_id = 0;
@@ -338,7 +340,7 @@ void siot_mesh_at_root_init( sa_time_val* currt )
 
 ///////////////////   Basic calls: device list  //////////////////////
 
-uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitter, uint8_t* bus_types, uint16_t bus_type_cnt )
+uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitter, uint16_t bus_id_max, uint8_t* bus_types, uint16_t bus_type_cnt )
 {
 	unsigned int i;
 	for ( i=0; i<mesh_routing_data.size(); i++ )
@@ -346,6 +348,7 @@ uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitt
 			return SIOT_MESH_AT_ROOT_RET_ALREADY_EXISTS;
 	SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA data;
 	data.device_id = device_id;
+	data.bus_id_max = bus_id_max;
 	data.is_retransmitter = is_retransmitter != 0;
 	for ( i=0; i<bus_type_cnt; i++ )
 		data.bus_type_list.push_back( bus_types[i] );
@@ -519,12 +522,17 @@ static uint16_t from_santa_request_id = 0;
 uint16_t get_next_from_santa_request_id() {return ++from_santa_request_id; }
 bool is_from_santa_request_id_less_eq( uint16_t prev_id, uint16_t new_id ) {return ((uint16_t)( new_id - prev_id  )) < (uint16_t)0x8000; }
 
-void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
+uint8_t siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
 {
 	ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_add_last_hop_in_data( src_id = %d, last_hop_id = %d, last_hop_bus_id = %d, conn_q = %d )\n",  src_id, last_hop_id, last_hop_bus_id, conn_q );
-	SIOT_MESH_LAST_HOP_DATA hop;
-	SIOT_MESH_ROUTING_DATA_ITERATOR it;
+	SIOT_MESH_ROUTING_DATA_ITERATOR it, it_last_hop;
+	uint8_t ret_code = siot_mesh_at_root_get_device_data( last_hop_id, it_last_hop );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+	if ( last_hop_bus_id >= it_last_hop->bus_id_max )
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
 
+	SIOT_MESH_LAST_HOP_DATA hop;
 	hop.last_hop_id = last_hop_id;
 	hop.last_hop_bus_id = last_hop_bus_id;
 	hop.conn_quality = conn_q;
@@ -535,7 +543,7 @@ void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t 
 	int ini_sz = last_hops_of_all_devices.size();
 	for ( i=0; i<ini_sz; i++ )
 	{
-		uint8_t ret_code = siot_mesh_at_root_get_device_data( src_id, it );
+		ret_code = siot_mesh_at_root_get_device_data( src_id, it );
 		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: consider a case when src_id points to nothing (note that it come over a network!)
 		if ( last_hops_of_all_devices[i].device_id == src_id/* && request_id == it->last_from_santa_request_id*/ )
 		{
@@ -560,7 +568,7 @@ void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t 
 		uint8_t ret_code = siot_mesh_at_root_get_device_data( src_id, it );
 		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: consider a case when src_id points to nothing (note that it come over a network!)
 		if ( is_from_santa_request_id_less_eq( request_id, it->last_from_santa_request_id ) )
-			return; // unlucky guy... nj late to come...
+			return SIOT_MESH_AT_ROOT_RET_IGNORED; // unlucky guy... too late to come...
 		it->last_from_santa_request_id = request_id;
 		DEVICE_LAST_HOPS dev_hops;
 		dev_hops.device_id = src_id;
@@ -572,13 +580,21 @@ void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t 
 		dev_hops.last_hops_in.push_back( hop );
 		last_hops_of_all_devices.push_back( dev_hops );
 	}
+
+	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
-void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q )
+uint8_t siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q )
 {
 	ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_add_last_hop_out_data( src_id = %d, bus_id_at_src = %d, first_receiver_id = %d, conn_q = %d )\n",  src_id, bus_id_at_src, first_receiver_id, conn_q );
 	SIOT_MESH_LAST_HOP_DATA hop;
-	SIOT_MESH_ROUTING_DATA_ITERATOR it;
+	SIOT_MESH_ROUTING_DATA_ITERATOR it, it_src;
+
+	uint8_t ret_code = siot_mesh_at_root_get_device_data( src_id, it_src );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+	if ( bus_id_at_src >= it_src->bus_id_max )
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
 
 	hop.last_hop_id = first_receiver_id;
 	hop.last_hop_bus_id = bus_id_at_src;
@@ -614,7 +630,7 @@ void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t
 		uint8_t ret_code = siot_mesh_at_root_get_device_data( src_id, it );
 		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: consider a case when src_id points to nothing (note that it come over a network!)
 		if ( request_id <= it->last_from_santa_request_id )
-			return; // unlucky guy... nj late to come...
+			return SIOT_MESH_AT_ROOT_RET_IGNORED; // unlucky guy... too late to come...
 		DEVICE_LAST_HOPS dev_hops;
 		dev_hops.device_id = src_id;
 		dev_hops.request_id = request_id;
@@ -625,6 +641,8 @@ void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t
 		dev_hops.last_hops_in.push_back( hop );
 		last_hops_of_all_devices.push_back( dev_hops );
 	}
+
+	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
 #define SIOT_MESH_IS_QUALITY_OF_INCOMING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )

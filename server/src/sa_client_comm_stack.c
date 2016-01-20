@@ -34,9 +34,9 @@ void FAKE_INITIALIZE_DEVICES() // NOTE: here we do a quick jump ove pairing (or 
 			tmp_key[j] = base_key[j] + ( (i+1) << 4 );
 		main_add_new_device( i+1, tmp_key );
 		if ( i == 0 )
-			siot_mesh_at_root_add_device( i+1, 1, bus_types, 2 );
+			siot_mesh_at_root_add_device( i+1, 1, 2, bus_types, 2 );
 		else
-			siot_mesh_at_root_add_device( i+1, 0, bus_types+1, 1 );
+			siot_mesh_at_root_add_device( i+1, 0, 1, bus_types+1, 1 );
 	}
 }
 
@@ -124,10 +124,11 @@ int main_loop()
 						zepto_parse_read_block( &po, key, 16 );
 						uint8_t is_retransmitter = zepto_parse_uint8( &po );
 						uint8_t bus_type_cnt = zepto_parse_uint8( &po );
+						uint8_t bus_id_max = zepto_parse_uint8( &po );
 						main_preinit_device( dev_id, key );
 						uint8_t bus_types[16];
 						zepto_parse_read_block( &po, bus_types, bus_type_cnt );
-						siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_types, bus_type_cnt );
+						siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_id_max, bus_types, bus_type_cnt );
 						break;
 					}
 					case COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST:
@@ -449,6 +450,7 @@ wait_for_comm_event:
 					uint8_t key[16];
 					zepto_parse_read_block( &po, key, 16 );
 					uint8_t is_retransmitter = zepto_parse_uint8( &po );
+					uint8_t bus_id_max = zepto_parse_uint8( &po );
 					uint8_t bus_type_cnt = zepto_parse_uint8( &po );
 					ZEPTO_DEBUG_PRINTF_4( "\'ret_code == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': dev_id = %d, is_retransmitter = %d, bus_type_cnt = %d\n", dev_id, is_retransmitter, bus_type_cnt );
 					if ( zepto_parsing_remaining_bytes( &po ) != 20 + bus_type_cnt )
@@ -465,7 +467,7 @@ wait_for_comm_event:
 						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_OK );
 						uint8_t bus_types[16];
 						zepto_parse_read_block( &po, bus_types, bus_type_cnt );
-						uint8_t ret2 = siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_types, bus_type_cnt );
+						uint8_t ret2 = siot_mesh_at_root_add_device( dev_id, is_retransmitter, bus_id_max, bus_types, bus_type_cnt );
 						ZEPTO_DEBUG_ASSERT( ret2 == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: think about repoerting error
 					}
 					else if  ( ret1 == MAIN_DEVICES_RET_ALREADY_EXISTS )

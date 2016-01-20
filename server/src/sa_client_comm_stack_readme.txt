@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-v0.0f
+v0.0g
 
 This file contains PRELIMINARY notes on packet exchange with CommStackServer
 
@@ -56,14 +56,19 @@ weherein bus_count is a value such that each bus_id of the device is in the rang
 This information is typically generated at time of device programming.
 COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet has no payload.
 
-Untill initialization is done packets no other types should be sent to CommStackServer.
+Untill initialization is done packets of no other types should be sent to CommStackServer.
 
 When initialization is done CommStackServer send a packet of type COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE 
-with 'address' set to the value of 'address' of COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet and payload consisting of error code: | error_code (1 byte) |
+with 'address' set to 
+- the value of 'address' of COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet in case of successfull initialization, or
+- the value of 'address' of a failing packet,
+and payload consisting of error code: | error_code (1 byte) |
 wherein error_code is one of
 COMMLAYER_TO_CU_STATUS_OK: operation completed successfully;
 COMMLAYER_TO_CU_STATUS_FAILED_UNEXPECTED_PACKET: operation failed; in this case 'address' will be that of a packet causing error.
+COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA: operation failed; a packet is with incomplete or corrupted data.
 In case of any error during initialization phase CommStackServer process terminates.
+Note that in case of any error a packet COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE can be sent yet before the packet COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST is received by CommStaackServer.
 
 
 2. Regular packet exchange

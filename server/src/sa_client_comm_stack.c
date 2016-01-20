@@ -116,8 +116,9 @@ int main_loop()
 						ZEPTO_DEBUG_PRINTF_3( "\'packet_status == COMMLAYER_FROM_CU_STATUS_INITIALIZER\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
 						parser_obj po;
 						zepto_parser_init( &po, working_handle.packet_h );
+						uint16_t packet_sz = zepto_parsing_remaining_bytes( &po );
 
-						if ( zepto_parsing_remaining_bytes( &po ) < 2 )
+						if ( packet_sz < 2 )
 						{
 							zepto_write_uint8( init_reply_h, COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA );
 							zepto_response_to_request( init_reply_h );
@@ -131,7 +132,7 @@ int main_loop()
 						dev_id += tmp;
 						zepto_write_uint8( working_handle.packet_h, (uint8_t)dev_id );
 						zepto_write_uint8( working_handle.packet_h, (uint8_t)(dev_id>>8) );
-						if ( zepto_parsing_remaining_bytes( &po ) < 22 )
+						if ( packet_sz < 22 )
 						{
 							zepto_write_uint8( init_reply_h, COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA );
 							zepto_response_to_request( init_reply_h );
@@ -145,7 +146,7 @@ int main_loop()
 						uint8_t bus_id_max = zepto_parse_uint8( &po );
 						uint8_t bus_type_cnt = zepto_parse_uint8( &po );
 						ZEPTO_DEBUG_PRINTF_4( "\'ret_code == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': dev_id = %d, is_retransmitter = %d, bus_type_cnt = %d\n", dev_id, is_retransmitter, bus_type_cnt );
-						if ( bus_type_cnt == 0 || zepto_parsing_remaining_bytes( &po ) != 21 + bus_type_cnt )
+						if ( bus_type_cnt == 0 || packet_sz != 21 + bus_type_cnt )
 						{
 							zepto_write_uint8( init_reply_h, COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA );
 							zepto_response_to_request( init_reply_h );
@@ -476,7 +477,8 @@ wait_for_comm_event:
 					ZEPTO_DEBUG_PRINTF_3( "\'packet_status == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
 					parser_obj po;
 					zepto_parser_init( &po, working_handle.packet_h );
-					if ( zepto_parsing_remaining_bytes( &po ) < 2 )
+					uint16_t packet_sz = zepto_parsing_remaining_bytes( &po );
+					if ( packet_sz < 2 )
 					{
 						zepto_write_uint8( working_handle.packet_h, 0xFF );
 						zepto_write_uint8( working_handle.packet_h, 0xFF );
@@ -492,7 +494,7 @@ wait_for_comm_event:
 					dev_id += tmp;
 					zepto_write_uint8( working_handle.packet_h, (uint8_t)dev_id );
 					zepto_write_uint8( working_handle.packet_h, (uint8_t)(dev_id>>8) );
-					if ( zepto_parsing_remaining_bytes( &po ) < 22 )
+					if ( packet_sz < 22 )
 					{
 						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA );
 						zepto_response_to_request( working_handle.packet_h );
@@ -506,7 +508,7 @@ wait_for_comm_event:
 					uint8_t bus_id_max = zepto_parse_uint8( &po );
 					uint8_t bus_type_cnt = zepto_parse_uint8( &po );
 					ZEPTO_DEBUG_PRINTF_4( "\'ret_code == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': dev_id = %d, is_retransmitter = %d, bus_type_cnt = %d\n", dev_id, is_retransmitter, bus_type_cnt );
-					if ( bus_type_cnt == 0 || zepto_parsing_remaining_bytes( &po ) != 21 + bus_type_cnt )
+					if ( bus_type_cnt == 0 || packet_sz != 21 + bus_type_cnt )
 					{
 						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA );
 						zepto_response_to_request( working_handle.packet_h );
@@ -539,17 +541,39 @@ wait_for_comm_event:
 					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
 					parser_obj po;
 					zepto_parser_init( &po, working_handle.packet_h );
-					ZEPTO_DEBUG_ASSERT( zepto_parsing_remaining_bytes( &po ) == 2 );
-					uint8_t tmp = zepto_parse_uint8( &po );
-					uint16_t dev_id = zepto_parse_uint8( &po );
-					dev_id <<= 8;
-					dev_id += tmp;
-					uint8_t ret1 = main_remove_device( dev_id );
-					ZEPTO_DEBUG_ASSERT( ret1 == MAIN_DEVICES_RET_OK ); // TODO: think about error handling/reporting
-					ret1 = siot_mesh_at_root_remove_device( dev_id );
-					ZEPTO_DEBUG_ASSERT( ret1 == SIOT_MESH_AT_ROOT_RET_OK ); // TODO: think about error handling/reporting
+					uint16_t packet_sz = zepto_parsing_remaining_bytes( &po );
+					bool ok = packet_sz == 2;
+					uint16_t dev_id;
+					if ( ok )
+					{
+						uint8_t tmp = zepto_parse_uint8( &po );
+						dev_id = zepto_parse_uint8( &po );
+						dev_id <<= 8;
+						dev_id += tmp;
+						uint8_t ret1 = main_remove_device( dev_id );
+						ok = ret1 == MAIN_DEVICES_RET_OK;
+						ret1 = siot_mesh_at_root_remove_device( dev_id );
+						ok = ok && ret1 == SIOT_MESH_AT_ROOT_RET_OK;
+					}
+					else
+					{
+						zepto_write_uint8( working_handle.packet_h, 0xFF );
+						zepto_write_uint8( working_handle.packet_h, 0xFF );
+						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA );
+						zepto_response_to_request( working_handle.packet_h );
+						send_device_remove_completion_to_central_unit( working_handle.packet_h, param );
+					}
+
 					zepto_write_uint8( working_handle.packet_h, (uint8_t)dev_id );
 					zepto_write_uint8( working_handle.packet_h, (uint8_t)(dev_id>>8) );
+					if ( ok )
+					{
+						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_OK );
+					}
+					else
+					{
+						zepto_write_uint8( working_handle.packet_h, COMMLAYER_TO_CU_STATUS_FAILED_UNKNOWN_REASON ); // TODO: more specific code
+					}
 					zepto_response_to_request( working_handle.packet_h );
 					send_device_remove_completion_to_central_unit( working_handle.packet_h, param );
 					goto wait_for_comm_event;

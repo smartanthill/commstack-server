@@ -47,8 +47,6 @@ extern "C" {
 #include <list>
 using namespace std;
 
-#define EEPROM_CHECKSUM_SIZE 4
-
 typedef struct _PER_DEVICE_STORAGE_DATA
 {
 	uint16_t device_id;
@@ -66,7 +64,7 @@ uint8_t perm_storage_add_device( uint16_t device_id )
 			return PERM_STORAGE_RET_ALREADY_EXISTS;
 	PER_DEVICE_STORAGE_DATA device;
 	device.device_id = device_id;
-	device.dev_data_sz = DATA_SASP_NONCE_LW_SIZE + DATA_SASP_NONCE_LS_SIZE + 2 * EEPROM_CHECKSUM_SIZE;
+	device.dev_data_sz = PERM_STORAGE_MIN_SIZE;
 	device.dev_data = new uint8_t[ device.dev_data_sz ];
 	if ( device.dev_data == NULL )
 		return PERM_STORAGE_RET_OUT_OF_MEM;
@@ -211,9 +209,9 @@ void eeprom_read( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data )
 	parser_obj po;
 	zepto_parser_init( &po, mem_h );
 	uint16_t full_sz = zepto_parsing_remaining_bytes( &po );
-	ZEPTO_DEBUG_ASSERT( full_sz == DATA_SASP_NONCE_LW_SIZE + DATA_SASP_NONCE_LS_SIZE + 2 * EEPROM_CHECKSUM_SIZE );
-	ZEPTO_DEBUG_ASSERT( dev->dev_data_sz == DATA_SASP_NONCE_LW_SIZE + DATA_SASP_NONCE_LS_SIZE + 2 * EEPROM_CHECKSUM_SIZE );
-	zepto_parse_read_block( &po, data, DATA_SASP_NONCE_LW_SIZE + DATA_SASP_NONCE_LS_SIZE + 2 * EEPROM_CHECKSUM_SIZE );
+	ZEPTO_DEBUG_ASSERT( full_sz == PERM_STORAGE_MIN_SIZE );
+	ZEPTO_DEBUG_ASSERT( dev->dev_data_sz == PERM_STORAGE_MIN_SIZE );
+	zepto_parse_read_block( &po, data, PERM_STORAGE_MIN_SIZE );
 
 	uint8_t* buff = dev->dev_data + item * ( DATA_SASP_NONCE_LS_SIZE + EEPROM_CHECKSUM_SIZE );
 	uint8_t checksum_calculated[ EEPROM_CHECKSUM_SIZE ]; init_checksum( checksum_calculated );

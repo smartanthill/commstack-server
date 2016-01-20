@@ -138,9 +138,25 @@ uint8_t main_postinit_all_devices()
 		device.MEMORY_HANDLE_SAGDP_LSM_APP_SAOUDP_ADDR = acquire_memory_handle();
 		device.MEMORY_HANDLE_SAGDP_LSM_CTR = acquire_memory_handle();
 		device.MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR = acquire_memory_handle();
-		sasp_restore_from_backup( &(device.sasp_data), device.device_id );
+
+		// test data availability
+		MEMORY_HANDLE mem_h = acquire_memory_handle();
+		ZEPTO_DEBUG_ASSERT( mem_h != MEMORY_HANDLE_INVALID );
+		send_sync_request_to_central_unit_to_get_data( mem_h, device.device_id );
+		parser_obj po;
+		zepto_parser_init( &po, mem_h );
+		uint16_t full_sz = zepto_parsing_remaining_bytes( &po );
+		if ( full_sz >= PERM_STORAGE_MIN_SIZE )
+		{
+			sasp_restore_from_backup( &(device.sasp_data), device.device_id );
+		}
+		else
+		{
+			sasp_init_eeprom_data_at_lifestart( &(device.sasp_data), device.device_id );
+		}
 		sagdp_init( &(device.sagdp_context_app) );
 		sagdp_init( &(device.sagdp_context_ctr) );
+
 	}
 	return MAIN_DEVICES_RET_OK;
 }

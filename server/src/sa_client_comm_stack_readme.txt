@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-v0.0g
+v0.0H
 
 This file contains PRELIMINARY notes on packet exchange with CommStackServer
 
@@ -67,6 +67,7 @@ wherein error_code is one of
 COMMLAYER_TO_CU_STATUS_OK: operation completed successfully;
 COMMLAYER_TO_CU_STATUS_FAILED_UNEXPECTED_PACKET: operation failed; in this case 'address' will be that of a packet causing error.
 COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA: operation failed; a packet is with incomplete or corrupted data.
+COMMLAYER_TO_CU_STATUS_FAILED_EXISTS: attempt to supply data for the same device twice
 In case of any error during initialization phase CommStackServer process terminates.
 Note that in case of any error a packet COMMLAYER_TO_CU_STATUS_INITIALIZATION_DONE can be sent yet before the packet COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST is received by CommStaackServer.
 
@@ -121,9 +122,14 @@ NOTE: from time COMMLAYER_FROM_CU_STATUS_ADD_DEVICE is received and COMMLAYER_TO
 
 To remove a device a packet of type COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE is sent. The value of 'address' is a unique number. Its payload is | device_id (2 byets, low, high) | of a device to be removed.
 In response to this request a packet of type COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED is sent; its 'address' field is a copy of that field from a respective request,
-and its payload contains ID of the device removed: | device_id (2 bytes, low, high ) |
+and its payload contains ID of the device removed: | device_id (2 bytes, low, high ) | error_code (1 byte) |
+wherein error_code is one of the following values:
+COMMLAYER_TO_CU_STATUS_OK: operation successfull
+COMMLAYER_TO_CU_STATUS_FAILED_DOES_NOT_EXIST: a device with device_id specified in the request is NOT IN THE LIST (repeated attempt to REMOVE?)
+COMMLAYER_TO_CU_STATUS_FAILED_INCOMPLETE_OR_CORRUPTED_DATA: payload of the request is inconsistent
+COMMLAYER_TO_CU_STATUS_FAILED_UNKNOWN_REASON: any other reason to fail (should never happen)
 NOTE: from time COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE is received and COMMLAYER_TO_CU_STATUS_DEVICE_REMOVED is sent a number of 'synchronous' requests to read or write data can be sent to Client
-TODO: think about error reporting
+
 
 5. Error reporting
 

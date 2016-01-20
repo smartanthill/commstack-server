@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-v0.0e
+v0.0f
 
 This file contains PRELIMINARY notes on packet exchange with CommStackServer
 
@@ -51,7 +51,8 @@ type = COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST,
 whyle the 'address' starts from 0 and must be incremented with each next packet 
 (thus the value of 'address' in a packet with type = COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST will give a number of previously sent packets with type = COMMLAYER_FROM_CU_STATUS_INITIALIZER).
 Payload of each COMMLAYER_FROM_CU_STATUS_INITIALIZER packet has the following structure:
-| device_id (2 bytes, low, high) | encryption_key (16 bytes) | is_retransmitter (1 byte) | bus_id_max (1 byte) | bus_type_count (1 byte) | bus_types (variable size) |
+| device_id (2 bytes, low, high) | encryption_key (16 bytes) | is_retransmitter (1 byte) | bus_count (1 byte) | bus_type_count (1 byte) | bus_types (variable size) |
+weherein bus_count is a value such that each bus_id of the device is in the range [0 .. bus_count-1].
 This information is typically generated at time of device programming.
 COMMLAYER_FROM_CU_STATUS_INITIALIZER_LAST packet has no payload.
 

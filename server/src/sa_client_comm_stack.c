@@ -232,6 +232,7 @@ int main_loop()
 	while ( !init_loop_done );
 
 	zepto_write_uint8( init_reply_h, ini_cnt == param ? COMMLAYER_TO_CU_STATUS_OK : COMMLAYER_TO_CU_STATUS_FAILED_UNKNOWN_REASON );
+	zepto_response_to_request( init_reply_h );
 	send_device_initialization_completion_to_central_unit( ini_cnt, init_reply_h );
 	if ( ini_cnt == param )
 	{

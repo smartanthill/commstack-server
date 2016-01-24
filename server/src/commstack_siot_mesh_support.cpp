@@ -48,6 +48,21 @@ typedef vector< SIOT_MESH_ROUTE > SIOT_M_ROUTE_TABLE_TYPE;
 typedef vector< SIOT_MESH_LINK > SIOT_M_LINK_TABLE_TYPE;
 typedef vector< int > SIOT_M_BUS_TYPE_LIST_TYPE;
 
+#ifdef SIOT_MESH_BTLE_MODE
+
+typedef struct _SIOT_MESH_BTLE_CONN_RQ_DATA
+{
+	uint16_t reporter_id;
+	uint16_t reporter_bus_id;
+//	uint8_t conn_quality;
+//	uint16_t request_id;
+	sa_time_val time_of_receiving;
+} SIOT_MESH_BTLE_CONN_RQ_DATA;
+
+typedef vector< SIOT_MESH_BTLE_CONN_RQ_DATA > BTLE_CONNECTION_REQUESTS;
+
+#endif // SIOT_MESH_BTLE_MODE
+
 typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA // used to keep copies of respective tables at devices
 {
 	uint16_t device_id;
@@ -55,8 +70,8 @@ typedef struct _SIOT_MESH_DEVICE_ROUTE_AND_LINK_DATA // used to keep copies of r
 	uint16_t bus_id_max;
 	uint16_t last_from_santa_request_id;
 #ifdef SIOT_MESH_BTLE_MODE
-	uint16_t last_reconnect_req_id;
-	bool last_reconnect_req_id_is_valid;
+	bool btle_deemed_connected;
+	BTLE_CONNECTION_REQUESTS btle_connection_requests;
 #endif
 	sa_time_val time_to_sent_next_from_santa;
 	bool from_santa_sequence_started;
@@ -331,8 +346,7 @@ void siot_mesh_at_root_init( sa_time_val* currt )
 	data.last_from_santa_request_id = 0;
 
 #ifdef SIOT_MESH_BTLE_MODE
-	data.last_reconnect_req_id = 0;
-	data.last_reconnect_req_id_is_valid = false;
+	data.btle_deemed_connected = false;
 #endif
 
 	mesh_routing_data.push_back( data );
@@ -356,8 +370,7 @@ uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitt
 	data.last_from_santa_request_id = 0;
 
 #ifdef SIOT_MESH_BTLE_MODE
-	data.last_reconnect_req_id = 0;
-	data.last_reconnect_req_id_is_valid = false;
+	data.btle_deemed_connected = false;
 #endif
 
 	mesh_routing_data.push_back( data );
@@ -2267,3 +2280,116 @@ uint8_t siot_mesh_at_root_remove_device( uint16_t device_id )
 
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
+
+#ifdef SIOT_MESH_BTLE_MODE
+uint8_t siot_mesh_at_root_btle_register_connection_request( uint16_t reporting_device_id, uint16_t bus_id_at_reporting_device, uint16_t requesting_device_id, const sa_time_val* currt, sa_time_val* time_to_next_event )
+{
+	// 1. validate received data
+	SIOT_MESH_ROUTING_DATA_ITERATOR it_requester, it_reporter;
+	uint8_t ret_code = siot_mesh_at_root_get_device_data( requesting_device_id, it_requester );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK ) // something went wrong, anyway
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+	ret_code = siot_mesh_at_root_get_device_data( reporting_device_id, it_reporter );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK ) // something went wrong, anyway
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+	if ( bus_id_at_reporting_device >= it_reporter->bus_id_max )
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+
+	// 2. check whether we're supposed to consider this request
+	if ( it_requester->btle_deemed_connected )
+	{
+		ZEPTO_DEBUG_ASSERT( it_requester->btle_connection_requests.size() == 0 );
+		return SIOT_MESH_AT_ROOT_RET_NOT_GRUNTED;
+	}
+
+	// 3. If this is the first notification, schedule route update
+	sa_time_val remaining;
+	TIME_MILLISECONDS16_TO_TIMEVAL( MESH_WAIT_TO_ALLOW_CONNECTION, remaining );
+	sa_hal_time_val_copy_from_if_src_less( time_to_next_event, &remaining );
+	
+	// 4. add data to store
+	unsigned int i;
+	for ( i=0; i<it_requester->btle_connection_requests.size(); i++ )
+		if ( it_requester->btle_connection_requests[i].reporter_id == reporting_device_id && it_requester->btle_connection_requests[i].reporter_bus_id == bus_id_at_reporting_device )
+		{
+			// TODO: think whether we want to introduce any kind of counter, etc
+			return SIOT_MESH_AT_ROOT_RET_OK;
+		}
+	SIOT_MESH_BTLE_CONN_RQ_DATA connd;
+	connd.reporter_id = reporting_device_id;
+	connd.reporter_bus_id = bus_id_at_reporting_device;
+	sa_hal_time_val_copy_from( &(connd.time_of_receiving), currt );
+	it_requester->btle_connection_requests.push_back( connd );
+
+	return SIOT_MESH_AT_ROOT_RET_OK;
+}
+
+uint8_t siot_mesh_at_root_btle_register_connection_loss( uint16_t reporting_device_id, uint16_t lost_device_id )
+{
+	// 1. validate received data
+	SIOT_MESH_ROUTING_DATA_ITERATOR it_lost;
+	uint8_t ret_code = siot_mesh_at_root_get_device_data( lost_device_id, it_lost );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK ) // something went wrong, anyway
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+	ret_code = siot_mesh_at_root_sanitize_device_id( reporting_device_id );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK ) // something went wrong, anyway
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+
+	// 2. Mark as disconnected
+	ZEPTO_DEBUG_ASSERT( ( it_lost->btle_deemed_connected || it_lost->btle_connection_requests.size() == 0 ) || (!it_lost->btle_deemed_connected) );
+	it_lost->btle_deemed_connected = false;
+
+	return SIOT_MESH_AT_ROOT_RET_OK;
+}
+
+void siot_mesh_at_root_form_connection_allowance_packet( MEMORY_HANDLE mem_h, uint16_t device_id )
+{
+}
+
+uint8_t siot_mesh_at_root_form_allow_to_connect_packet( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t* device_id )
+{
+dbg_siot_mesh_at_root_validate_all_device_tables();
+
+	sa_time_val oldest_time_point;
+	sa_hal_time_val_copy_from( &oldest_time_point, currt );
+	uint16_t oldest_id;
+	uint16_t i;
+
+	bool found = false;
+	for ( i=0; i<mesh_routing_data.size(); i++ )
+	{
+		if ( mesh_routing_data[i].btle_deemed_connected )
+		{
+			ZEPTO_DEBUG_ASSERT( mesh_routing_data[i].btle_connection_requests.size() == 0 );
+			continue;
+		}
+		if ( mesh_routing_data[i].btle_connection_requests.size() == 0 )
+			continue;
+
+		if ( sa_hal_time_val_is_less_eq( &(mesh_routing_data[i].btle_connection_requests[0].time_of_receiving), &oldest_time_point ) ) // used slot is yet older
+		{
+			sa_hal_time_val_copy_from( &oldest_time_point, &(mesh_routing_data[i].btle_connection_requests[0].time_of_receiving) );
+			oldest_id = i;
+			found = true;
+		}
+	}
+
+	if ( found )
+	{
+		siot_mesh_at_root_form_connection_allowance_packet( mem_h, oldest_id );
+		ZEPTO_DEBUG_ASSERT( mesh_routing_data[oldest_id].btle_connection_requests.size() == 0 );
+	}
+
+	for ( i=0; i<mesh_routing_data.size(); i++ )
+		if ( mesh_routing_data[i].btle_connection_requests.size() )
+		{
+			sa_time_val scheduled_t;
+			TIME_MILLISECONDS16_TO_TIMEVAL( MESH_WAIT_TO_ALLOW_CONNECTION, scheduled_t );
+			SA_TIME_INCREMENT_BY_TICKS( scheduled_t, mesh_routing_data[i].btle_connection_requests[0].time_of_receiving );
+			sa_hal_time_val_get_remaining_time( currt, &scheduled_t, time_to_next_event );
+		}
+
+	return found ? SIOT_MESH_AT_ROOT_RET_OK : SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NOT_NOW;
+}
+
+#endif // SIOT_MESH_BTLE_MODE

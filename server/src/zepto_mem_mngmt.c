@@ -50,7 +50,7 @@ typedef struct _request_reply_mem_obj_acquirable
 #define BASE_MEM_BLOCK_SIZE	0x1000
 #else // USED_AS_MASTER
 #ifdef USED_AS_RETRANSMITTER
-#define BASE_MEM_BLOCK_SIZE	0x800
+#define BASE_MEM_BLOCK_SIZE	0x500
 #else // USED_AS_RETRANSMITTER
 #define BASE_MEM_BLOCK_SIZE	0x180
 #endif // USED_AS_RETRANSMITTER
@@ -1457,8 +1457,10 @@ REQUEST_REPLY_HANDLE memory_object_acquire()
 	if ( free_at_right > 1 )
 	{
 		uint8_t* right_end_of_free_space_at_right = left_end_of_free_space_at_right + free_at_right - 1;
+#ifdef SA_DEBUG
 		uint16_t free_at_right_copy = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right );
 		ZEPTO_DEBUG_ASSERT( free_at_right == free_at_right_copy );
+#endif
 
 		*left_end_of_free_space_at_right = 1;
 		left_end_of_free_space_at_right++;
@@ -1542,16 +1544,20 @@ void memory_object_release( REQUEST_REPLY_HANDLE mem_h )
 	uint8_t* right_end_of_free_space_at_left = obj->ptr - 1;
 	uint16_t free_at_left = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_left );
 	uint8_t* left_end_of_free_space_at_left = right_end_of_free_space_at_left - free_at_left + 1;
+#ifdef SA_DEBUG
 	uint16_t free_at_left_copy = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_left );
 	ZEPTO_DEBUG_ASSERT( free_at_left == free_at_left_copy );
 	ZEPTO_DEBUG_ASSERT( free_at_left >= 1 );
+#endif
 
 	uint8_t* left_end_of_free_space_at_right = obj->ptr + obj->rq_size + obj->rsp_size;
 	uint16_t free_at_right = zepto_mem_man_parse_encoded_uint16_no_size_checks_forward( left_end_of_free_space_at_right );
 	uint8_t* right_end_of_free_space_at_right = left_end_of_free_space_at_right + free_at_right - 1;
+#ifdef SA_DEBUG
 	uint16_t free_at_right_copy = zepto_mem_man_parse_encoded_uint16_no_size_checks_backward( right_end_of_free_space_at_right );
 	ZEPTO_DEBUG_ASSERT( free_at_right == free_at_right_copy );
 	ZEPTO_DEBUG_ASSERT( free_at_right >= 1 );
+#endif
 
 	uint16_t free_sz_after_release = free_at_left + obj->rq_size + obj->rsp_size + free_at_right;
 
@@ -1567,7 +1573,7 @@ void memory_object_release( REQUEST_REPLY_HANDLE mem_h )
 	// 3. release memory of object storage, if possible
 	if ( (uint8_t*)(obj+1) == base_buff + base_buff_sz ) // the last
 	{
-		request_reply_mem_obj* erase_start = obj;
+//		request_reply_mem_obj* erase_start = obj;
 		while ( obj != start && obj->ptr == NULL ) 
 		{
 			if ( (obj-1)->ptr != NULL )
@@ -1916,13 +1922,6 @@ void zepto_write_prepend_block( MEMORY_HANDLE mem_h, const uint8_t* block, uint1
 //	memory_object_prepend( mem_h, block, size );
 	memory_object_prepend( mem_h, size );
 	ZEPTO_MEMCPY( memory_objects[ mem_h ].ptr, block, size );
-}
-
-
-
-uint16_t zepto_writer_get_response_size( MEMORY_HANDLE mem_h )
-{
-	return memory_object_get_response_size( mem_h );
 }
 
 // inspired by SAGDP: creating a copy of the packet
@@ -2307,20 +2306,6 @@ void zepto_parser_strip_beginning_of_request( parser_obj* po )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-uint16_t ugly_hook_get_request_size( REQUEST_REPLY_HANDLE mem_h )
-{
-	ASSERT_MEMORY_HANDLE_VALID( mem_h )
-	return memory_object_get_request_size( mem_h );
-}
-
-uint16_t ugly_hook_get_response_size( REQUEST_REPLY_HANDLE mem_h )
-{
-	ASSERT_MEMORY_HANDLE_VALID( mem_h )
-	return memory_object_get_response_size( mem_h );
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 #ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 MEMORY_HANDLE acquire_memory_handle()
 {
@@ -2359,8 +2344,10 @@ bool zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE mem_h, u
 void zepto_memman_append_locally_generated_data( MEMORY_HANDLE mem_h, uint16_t size, const uint8_t* buff )
 {
 	ASSERT_MEMORY_HANDLE_VALID( mem_h )
+#ifdef SA_DEBUG
 	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
 	ZEPTO_DEBUG_ASSERT( obj->ptr != NULL );
+#endif
 	uint8_t* buff_to = memory_object_append( mem_h, size );
 	ZEPTO_MEMCPY( buff_to, buff, size );
 }
@@ -2370,7 +2357,7 @@ void zepto_memman_trim_locally_generated_data_at_right( MEMORY_HANDLE mem_h, uin
 	ASSERT_MEMORY_HANDLE_VALID( mem_h );
 	request_reply_mem_obj* obj = MEMORY_OBJECT_PTR( mem_h );
 	ZEPTO_DEBUG_ASSERT( obj->ptr != NULL );
-	uint8_t* buff = obj->ptr;
+//	uint8_t* buff = obj->ptr;
 	uint16_t ini_sz = obj->rq_size + obj->rsp_size;
 	memory_block_trim_at_right( obj->ptr, ini_sz, size );
 	if ( obj->rsp_size >= size )

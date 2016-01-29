@@ -113,7 +113,7 @@ int main_loop()
 					{
 						// | device_id (2 bytes, low, high) | key (16 bytes) | is_retransmitter (1 byte) | bus_count | bus_type_count (1 byte) | bus_type_list (variable size) |
 						zepto_response_to_request(  working_handle.packet_h );
-						ZEPTO_DEBUG_PRINTF_3( "\'packet_status == COMMLAYER_FROM_CU_STATUS_INITIALIZER\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+						ZEPTO_DEBUG_PRINTF_3( "\'packet_status == COMMLAYER_FROM_CU_STATUS_INITIALIZER\': rq_size: %d, rsp_size: %d\n", memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 						parser_obj po;
 						zepto_parser_init( &po, working_handle.packet_h );
 						uint16_t packet_sz = zepto_parsing_remaining_bytes( &po );
@@ -268,7 +268,7 @@ wait_for_comm_event:
 				ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 			}
 			zepto_response_to_request(  working_handle.packet_h );
-			ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+			ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 		
 			switch ( ret_code )
 			{
@@ -383,7 +383,7 @@ wait_for_comm_event:
 						ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 					}
 					zepto_response_to_request(  working_handle.packet_h );
-					ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 		
 					switch ( ret_code )
 					{
@@ -431,7 +431,7 @@ wait_for_comm_event:
 //		ret_code = HAL_WAIT_FOR_COMM_EVENT( &wait_for );
 		ret_code = wait_for_communication_event( &wait_for );
 		SA_TIME_SET_INFINITE_TIME( wait_for.wait_time );
-//		ZEPTO_DEBUG_PRINTF_4( "=============================================Msg wait event; ret = %d, rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+//		ZEPTO_DEBUG_PRINTF_4( "=============================================Msg wait event; ret = %d, rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 
 		switch ( ret_code )
 		{
@@ -452,7 +452,7 @@ wait_for_comm_event:
 				if ( ret_code == COMMLAYER_FROM_CU_STATUS_FOR_SLAVE )
 				{
 					zepto_response_to_request(  working_handle.packet_h );
-					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_CU\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_CU\': rq_size: %d, rsp_size: %d\n", memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 					dev_in_use = param;
 //					dev_in_use --;
 //					ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
@@ -467,7 +467,7 @@ wait_for_comm_event:
 					// regular processing will be done below in the next block
 					ZEPTO_DEBUG_ASSERT( bus_id != SIOT_MESH_BUS_UNDEFINED );
 					zepto_response_to_request(  working_handle.packet_h );
-					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_SLAVE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_RET_OK_AS_SLAVE\': rq_size: %d, rsp_size: %d\n", memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 					goto siotmp_rec;
 					break;
 				}
@@ -475,7 +475,7 @@ wait_for_comm_event:
 				{
 					// | device_id (2 bytes, low, high) | key (16 bytes) | is_retransmitter (1 byte) | bus_type_count (1 byte) | bus_type_list (variable size) |
 					zepto_response_to_request(  working_handle.packet_h );
-					ZEPTO_DEBUG_PRINTF_3( "\'packet_status == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					ZEPTO_DEBUG_PRINTF_3( "\'packet_status == COMMLAYER_FROM_CU_STATUS_ADD_DEVICE\': rq_size: %d, rsp_size: %d\n", memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 					parser_obj po;
 					zepto_parser_init( &po, working_handle.packet_h );
 					uint16_t packet_sz = zepto_parsing_remaining_bytes( &po );
@@ -539,7 +539,7 @@ wait_for_comm_event:
 				{
 					// | device_id (2 bytes, low, high) |
 					zepto_response_to_request(  working_handle.packet_h );
-					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_FROM_CU_STATUS_REMOVE_DEVICE\': rq_size: %d, rsp_size: %d\n", memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 					parser_obj po;
 					zepto_parser_init( &po, working_handle.packet_h );
 					uint16_t packet_sz = zepto_parsing_remaining_bytes( &po );
@@ -583,7 +583,7 @@ wait_for_comm_event:
 				else if ( ret_code == COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST )
 				{
 					zepto_response_to_request(  working_handle.packet_h );
-					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST\': rq_size: %d, rsp_size: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+					ZEPTO_DEBUG_PRINTF_3( "\'ret_code == COMMLAYER_FROM_CU_STATUS_GET_DEV_PERF_COUNTERS_REQUEST\': rq_size: %d, rsp_size: %d\n", memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 					device = main_get_device_data_by_device_id( param );
 					if ( device != NULL )
 					{
@@ -615,7 +615,7 @@ wait_for_comm_event:
 								ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 							}
 							zepto_response_to_request(  working_handle.packet_h );
-							ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+							ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 		
 							switch ( ret_code )
 							{
@@ -672,7 +672,7 @@ wait_for_comm_event:
 
 
 		ZEPTO_DEBUG_PRINTF_1("Message from server received\n");
-		ZEPTO_DEBUG_PRINTF_4( "ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		ZEPTO_DEBUG_PRINTF_4( "ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 
 
 		// 2.0. Pass to siot/mesh
@@ -682,7 +682,7 @@ siotmp_rec:
 //		dev_in_use--;
 //		ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
 		zepto_response_to_request(  working_handle.packet_h );
-		ZEPTO_DEBUG_PRINTF_5( "handler_siot_mesh_receive_packet(): ret: %d; rq_size: %d, rsp_size: %d, dev_in_use = %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ), dev_in_use );
+		ZEPTO_DEBUG_PRINTF_5( "handler_siot_mesh_receive_packet(): ret: %d; rq_size: %d, rsp_size: %d, dev_in_use = %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ), dev_in_use );
 
 		switch ( ret_code )
 		{
@@ -755,7 +755,7 @@ siotmp_rec:
 		ZEPTO_DEBUG_ASSERT( device != NULL );
 		ret_code = handler_sasp_receive( device->AES_ENCRYPTION_KEY, pid,  working_handle.packet_h, &(device->sasp_data), device->device_id );
 		zepto_response_to_request(  working_handle.packet_h );
-		ZEPTO_DEBUG_PRINTF_6( "handler_sasp_receive(): ret: %d; rq_size: %d, rsp_size: %d, dev_in_use = %d, device_id = %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ), dev_in_use, device->device_id );
+		ZEPTO_DEBUG_PRINTF_6( "handler_sasp_receive(): ret: %d; rq_size: %d, rsp_size: %d, dev_in_use = %d, device_id = %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ), dev_in_use, device->device_id );
 
 		switch ( ret_code )
 		{
@@ -840,7 +840,7 @@ siotmp_rec:
 				ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 			}
 			zepto_response_to_request(  working_handle.packet_h );
-			ZEPTO_DEBUG_PRINTF_4( "SAGDP1 (ctr): ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+			ZEPTO_DEBUG_PRINTF_4( "SAGDP1 (ctr): ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 
 			switch ( ret_code )
 			{
@@ -929,7 +929,7 @@ siotmp_rec:
 			ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 		}
 		zepto_response_to_request(  working_handle.packet_h );
-		ZEPTO_DEBUG_PRINTF_4( "SAGDP1: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		ZEPTO_DEBUG_PRINTF_4( "SAGDP1: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 
 		switch ( ret_code )
 		{
@@ -987,7 +987,7 @@ siotmp_rec:
 #if 0 // we cannot do any essential processing here in comm stack...
 		ret_code = handler_saccp_receive(  working_handle.packet_h/*, sasp_nonce_type chain_id*/ ); //master_process( &wait_to_continue_processing,  working_handle.packet_h );
 		zepto_response_to_request(  working_handle.packet_h );
-		ZEPTO_DEBUG_PRINTF_4( "SACCP1: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		ZEPTO_DEBUG_PRINTF_4( "SACCP1: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 		switch ( ret_code )
 		{
 			case SACCP_RET_PASS_TO_CENTRAL_UNIT:
@@ -1036,13 +1036,13 @@ client_received:
 		ret_code = handler_saccp_prepare_to_send(  working_handle.packet_h );
 		zepto_response_to_request(  working_handle.packet_h );
 		gdp_context = SAGDP_CONTEXT_APPLICATION; // TODO: context selection based on caller
-		ZEPTO_DEBUG_PRINTF_4( "SACCP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		ZEPTO_DEBUG_PRINTF_4( "SACCP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 		// TODO: analyze and process ret_code
 #endif
 
 		// 5. SAGDP
 		ZEPTO_DEBUG_ASSERT( device != NULL );
-		ZEPTO_DEBUG_PRINTF_5( "@client_received: rq_size: %d, rsp_size: %d, dev_in_use: %d, for-device: %d\n", ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ), dev_in_use, device->device_id );
+		ZEPTO_DEBUG_PRINTF_5( "@client_received: rq_size: %d, rsp_size: %d, dev_in_use: %d, for-device: %d\n", memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ), dev_in_use, device->device_id );
 		HAL_GET_TIME( &(currt), TIME_REQUEST_POINT__AFTER_SACCP );
 //		gdp_context = SAGDP_CONTEXT_APPLICATION; // TODO: context selection based on caller
 //		ZEPTO_DEBUG_ASSERT( dev_in_use < MAX_INSTANCES_SUPPORTED );
@@ -1056,7 +1056,7 @@ client_received:
 			ZEPTO_DEBUG_ASSERT( ret_code != SAGDP_RET_NEED_NONCE );
 		}
 		zepto_response_to_request(  working_handle.packet_h );
-		ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		ZEPTO_DEBUG_PRINTF_4( "SAGDP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 
 		switch ( ret_code )
 		{
@@ -1086,7 +1086,7 @@ client_received:
 saspsend:
 		ret_code = handler_sasp_send( device->AES_ENCRYPTION_KEY, nonce,  working_handle.packet_h, &(device->sasp_data) );
 		zepto_response_to_request(  working_handle.packet_h );
-		ZEPTO_DEBUG_PRINTF_4( "SASP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, ugly_hook_get_request_size(  working_handle.packet_h ), ugly_hook_get_response_size(  working_handle.packet_h ) );
+		ZEPTO_DEBUG_PRINTF_4( "SASP2: ret: %d; rq_size: %d, rsp_size: %d\n", ret_code, memory_object_get_request_size(  working_handle.packet_h ), memory_object_get_response_size(  working_handle.packet_h ) );
 
 		switch ( ret_code )
 		{

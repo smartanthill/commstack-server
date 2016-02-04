@@ -2281,7 +2281,9 @@ uint8_t siot_mesh_at_root_remove_device( uint16_t device_id )
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
+
 #ifdef SIOT_MESH_BTLE_MODE
+
 uint8_t siot_mesh_at_root_btle_register_connection_request( uint16_t reporting_device_id, uint16_t bus_id_at_reporting_device, uint16_t requesting_device_id, const sa_time_val* currt, sa_time_val* time_to_next_event )
 {
 	// 1. validate received data
@@ -2339,11 +2341,22 @@ uint8_t siot_mesh_at_root_btle_register_connection_loss( uint16_t reporting_devi
 	ZEPTO_DEBUG_ASSERT( ( it_lost->btle_deemed_connected || it_lost->btle_connection_requests.size() == 0 ) || (!it_lost->btle_deemed_connected) );
 	it_lost->btle_deemed_connected = false;
 
+	// 3. initiate route table updates
+	siot_mesh_at_root_remove_link_to_target( lost_device_id, true );
+
 	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
-void siot_mesh_at_root_form_connection_allowance_packet( MEMORY_HANDLE mem_h, uint16_t device_id )
+uint8_t siot_mesh_at_root_form_connection_allowance_packet( MEMORY_HANDLE mem_h, uint16_t device_id )
 {
+	SIOT_MESH_ROUTING_DATA_ITERATOR dev;
+	uint8_t ret_code = siot_mesh_at_root_get_device_data( device_id, dev );
+	if ( ret_code != SIOT_MESH_AT_ROOT_RET_OK )
+		return SIOT_MESH_AT_ROOT_RET_INVALID_PARAM;
+	ZEPTO_DEBUG_ASSERT( !dev->btle_deemed_connected );
+	ZEPTO_DEBUG_ASSERT( dev->btle_connection_requests.size() != 0 );
+
+	return SIOT_MESH_AT_ROOT_RET_OK;
 }
 
 uint8_t siot_mesh_at_root_form_allow_to_connect_packet( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t* device_id )
@@ -2388,6 +2401,8 @@ dbg_siot_mesh_at_root_validate_all_device_tables();
 			SA_TIME_INCREMENT_BY_TICKS( scheduled_t, mesh_routing_data[i].btle_connection_requests[0].time_of_receiving );
 			sa_hal_time_val_get_remaining_time( currt, &scheduled_t, time_to_next_event );
 		}
+
+dbg_siot_mesh_at_root_validate_all_device_tables();
 
 	return found ? SIOT_MESH_AT_ROOT_RET_OK : SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NOT_NOW;
 }
